@@ -4,30 +4,35 @@
 import JSZip from 'jszip';
 
 /**
- * Get file extension for target MIME type
+ * Get file extension for target MIME type (image or video)
  * @param {string} mimeType 
  * @returns {string}
  */
 export function getExtensionForMime(mimeType) {
   switch (mimeType) {
+    // Image formats
     case 'image/jpeg': return '.jpg';
     case 'image/png': return '.png';
     case 'image/avif': return '.avif';
-    case 'image/webp':
+    case 'image/webp': return '.webp';
+    // Video formats
+    case 'video/mp4': return '.mp4';
+    case 'video/webm': return '.webm';
     default:
       return '.webp';
   }
 }
 
 /**
- * Generate a ZIP file containing converted images and thumbnails
+ * Generate a ZIP file containing converted images/videos and thumbnails.
  * @param {Array<{
  *   originalName: string,
  *   convertedBlob: Blob,
  *   thumbnailBlob: Blob | null,
- *   targetFormat: string
+ *   targetFormat: string,
+ *   itemType?: 'image'|'video'
  * }>} items 
- * @param {function(number): void} [onProgress] - optional progress callback (0 - 100)
+ * @param {function(number): void} [onProgress] - optional progress callback (0-100)
  * @returns {Promise<Blob>}
  */
 export async function createZipArchive(items, onProgress) {
@@ -36,19 +41,23 @@ export async function createZipArchive(items, onProgress) {
   const convertedFolder = zip.folder('converted');
   const thumbnailsFolder = zip.folder('thumbnails');
 
-  items.forEach((item, index) => {
+  items.forEach((item) => {
     if (!item.convertedBlob) return;
 
     const baseName = item.originalName.substring(0, item.originalName.lastIndexOf('.')) || item.originalName;
     const ext = getExtensionForMime(item.targetFormat);
+    const isVideo = item.itemType === 'video';
 
-    // Save main converted image
-    const convertedFilename = `${baseName}_converted${ext}`;
+    // Save main converted file
+    const convertedFilename = isVideo
+      ? `${baseName}_compressed${ext}`
+      : `${baseName}_converted${ext}`;
     convertedFolder.file(convertedFilename, item.convertedBlob);
 
-    // Save thumbnail image if present
+    // Save thumbnail: video thumbnails are PNG, image thumbs match target format
     if (item.thumbnailBlob && thumbnailsFolder) {
-      const thumbFilename = `thumb_${baseName}${ext}`;
+      const thumbExt = isVideo ? '.png' : ext;
+      const thumbFilename = `thumb_${baseName}${thumbExt}`;
       thumbnailsFolder.file(thumbFilename, item.thumbnailBlob);
     }
   });

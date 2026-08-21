@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CodedByKay - Image Utility | Client-side Image Converter & Thumbnail Generator</title>
-  <meta name="description" content="High performance client-side web utility to convert images to WebP, JPEG, PNG, or AVIF and automatically generate thumbnails. 100% private, no server upload.">
+  <title>CodedByKay - Media Utility | Image Converter, Video Compressor & Thumbnail Generator</title>
+  <meta name="description" content="Client-side media utility: convert images to WebP/JPEG/PNG/AVIF, compress videos to MP4/WebM, and generate thumbnails. 100% private, no server upload.">
   
   <link rel="stylesheet" href="/src/styles/main.css">
 </head>
@@ -17,10 +17,10 @@
       <div>
         <h1 class="brand-title">
           <span>⚡ CodedByKay</span>
-          <span class="brand-subtitle">Image Utility</span>
+          <span class="brand-subtitle">Media Utility</span>
         </h1>
         <p style="font-weight: 700; font-size: 0.85rem; opacity: 0.9; margin-top: 0.2rem;">
-          Client-side multi-image converter, thumbnail generator & ZIP packager
+          Client-side image converter, video compressor, thumbnail generator &amp; ZIP packager
         </p>
       </div>
       <div>
@@ -30,147 +30,314 @@
       </div>
     </header>
 
-    <!-- Main Grid Workspace -->
-    <main class="main-grid">
+    <!-- Tab Bar -->
+    <div class="tab-bar" role="tablist" aria-label="Media type">
+      <button id="tabImageBtn" class="tab-btn tab-active" role="tab" aria-selected="true" aria-controls="imageTabPanel">
+        🖼️ Images
+      </button>
+      <button id="tabVideoBtn" class="tab-btn" role="tab" aria-selected="false" aria-controls="videoTabPanel">
+        🎬 Videos
+      </button>
+    </div>
 
-      <!-- Left Column: Upload Dropzone & Image Queue -->
-      <section class="queue-section" aria-labelledby="queueHeading">
+    <!-- ══════════════ IMAGE TAB ══════════════ -->
+    <div id="imageTabPanel" role="tabpanel" style="display: contents;">
 
-        <!-- Drag & Drop Zone -->
-        <div id="dropzone" class="dropzone" role="region" aria-label="Drag and drop image upload area" tabindex="0">
-          <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/webp,image/avif,.jpg,.jpeg,.png,.webp,.avif" style="display: none;">
-          <div class="dropzone-icon">📁</div>
-          <h2 class="dropzone-title">Drag & Drop Images Here</h2>
-          <p class="dropzone-hint">or click anywhere to browse your files</p>
-          <div class="dropzone-formats">
-            <span class="badge">JPG / JPEG</span>
-            <span class="badge">PNG</span>
-            <span class="badge">WEBP</span>
-            <span class="badge">AVIF</span>
-          </div>
-        </div>
+      <!-- Main Grid Workspace -->
+      <main class="main-grid">
 
-        <!-- Progress Indicator -->
-        <div id="progressCard" class="progress-card" style="display: none;">
-          <div style="font-weight: 900; font-size: 1.05rem; display: flex; justify-content: space-between; align-items: center;">
-            <span>⚡ Converting Batch...</span>
-            <span id="progressText" style="font-family: var(--font-mono); font-size: 0.9rem;">0 / 0 (0%)</span>
-          </div>
-          <div class="progress-bar-outer" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-            <div id="progressBarInner" class="progress-bar-inner"></div>
-          </div>
-        </div>
+        <!-- Left Column: Upload Dropzone & Image Queue -->
+        <section class="queue-section" aria-labelledby="queueHeading">
 
-        <!-- Queue Section Header Controls -->
-        <div id="queueControls" class="queue-controls" style="display: none; margin-top: 1.5rem;">
-          <div class="queue-count">
-            <span id="queueHeading" class="section-title" style="border: none; padding: 0; margin: 0; display: inline;">Image Queue</span>
-            <span id="queueCountBadge" class="badge" style="background-color: var(--accent-yellow); color: #000; margin-left: 0.5rem;">0 Files</span>
-          </div>
-          <div style="display: flex; gap: 0.5rem;">
-            <button id="addMoreBtn" class="brutal-btn btn-sm btn-cyan">➕ Add More</button>
-            <button id="clearQueueBtn" class="brutal-btn btn-sm btn-pink">🗑️ Clear Queue</button>
-          </div>
-        </div>
-
-        <!-- Image List -->
-        <div id="queueList" class="queue-list" style="margin-top: 1rem;"></div>
-
-        <!-- Empty State -->
-        <div id="emptyState" class="empty-state" style="margin-top: 1.5rem;">
-          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🖼️</div>
-          <p class="empty-title">No Images Queued Yet</p>
-          <p style="font-size: 0.9rem; color: var(--text-muted);">
-            Drop your `.jpg`, `.png`, `.webp`, or `.avif` files above to configure format conversion and thumbnails.
-          </p>
-        </div>
-
-      </section>
-
-      <!-- Right Column: Settings & Actions Panel -->
-      <aside class="settings-sidebar">
-        <div class="brutal-card">
-          <h2 class="section-title">
-            <span>⚙️ Settings</span>
-          </h2>
-
-          <!-- Output Format -->
-          <div class="setting-group">
-            <label for="targetFormat" class="setting-label">Target Format</label>
-            <select id="targetFormat" class="brutal-select">
-              <option value="image/webp" selected>WebP (.webp)</option>
-              <option value="image/jpeg">JPEG (.jpg)</option>
-              <option value="image/png">PNG (.png)</option>
-              <option value="image/avif">AVIF (.avif)</option>
-            </select>
-          </div>
-
-          <!-- Quality Slider -->
-          <div class="setting-group">
-            <label for="qualitySlider" class="setting-label">Quality Level</label>
-            <div class="range-wrap">
-              <input type="range" id="qualitySlider" class="brutal-range" min="10" max="100" value="80" step="5">
-              <span id="qualityValue" class="range-val">80%</span>
+          <!-- Drag & Drop Zone -->
+          <div id="dropzone" class="dropzone" role="region" aria-label="Drag and drop image upload area" tabindex="0">
+            <input type="file" id="fileInput" multiple accept="image/jpeg,image/png,image/webp,image/avif,.jpg,.jpeg,.png,.webp,.avif" style="display: none;">
+            <div class="dropzone-icon">📁</div>
+            <h2 class="dropzone-title">Drag &amp; Drop Images Here</h2>
+            <p class="dropzone-hint">or click anywhere to browse your files</p>
+            <div class="dropzone-formats">
+              <span class="badge">JPG / JPEG</span>
+              <span class="badge">PNG</span>
+              <span class="badge">WEBP</span>
+              <span class="badge">AVIF</span>
             </div>
-            <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.3rem;">
-              Higher quality increases output file size. PNG is always lossless.
+          </div>
+
+          <!-- Progress Indicator -->
+          <div id="progressCard" class="progress-card" style="display: none;">
+            <div style="font-weight: 900; font-size: 1.05rem; display: flex; justify-content: space-between; align-items: center;">
+              <span>⚡ Converting Batch...</span>
+              <span id="progressText" style="font-family: var(--font-mono); font-size: 0.9rem;">0 / 0 (0%)</span>
+            </div>
+            <div class="progress-bar-outer" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="progressBarInner" class="progress-bar-inner"></div>
+            </div>
+          </div>
+
+          <!-- Queue Section Header Controls -->
+          <div id="queueControls" class="queue-controls" style="display: none; margin-top: 1.5rem;">
+            <div class="queue-count">
+              <span id="queueHeading" class="section-title" style="border: none; padding: 0; margin: 0; display: inline;">Image Queue</span>
+              <span id="queueCountBadge" class="badge" style="background-color: var(--accent-yellow); color: #000; margin-left: 0.5rem;">0 Files</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button id="addMoreBtn" class="brutal-btn btn-sm btn-cyan">➕ Add More</button>
+              <button id="clearQueueBtn" class="brutal-btn btn-sm btn-pink">🗑️ Clear Queue</button>
+            </div>
+          </div>
+
+          <!-- Image List -->
+          <div id="queueList" class="queue-list" style="margin-top: 1rem;"></div>
+
+          <!-- Empty State -->
+          <div id="emptyState" class="empty-state" style="margin-top: 1.5rem;">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🖼️</div>
+            <p class="empty-title">No Images Queued Yet</p>
+            <p style="font-size: 0.9rem; color: var(--text-muted);">
+              Drop your <code>.jpg</code>, <code>.png</code>, <code>.webp</code>, or <code>.avif</code> files above to configure format conversion and thumbnails.
             </p>
           </div>
 
-          <!-- Thumbnail Settings -->
-          <div class="setting-group">
-            <label class="checkbox-wrap">
-              <input type="checkbox" id="generateThumb" class="brutal-checkbox" checked>
-              <span>Generate Thumbnail Previews</span>
-            </label>
-          </div>
+        </section>
 
-          <div id="thumbSettingsGroup">
+        <!-- Right Column: Settings & Actions Panel -->
+        <aside class="settings-sidebar">
+          <div class="brutal-card">
+            <h2 class="section-title">
+              <span>⚙️ Image Settings</span>
+            </h2>
+
+            <!-- Output Format -->
             <div class="setting-group">
-              <label for="thumbPreset" class="setting-label">Thumbnail Size Preset</label>
-              <select id="thumbPreset" class="brutal-select">
-                <option value="150x150" selected>150 × 150 px (Square)</option>
-                <option value="256x256">256 × 256 px (Medium)</option>
-                <option value="512x512">512 × 512 px (Large)</option>
-                <option value="custom">Custom Dimensions</option>
+              <label for="targetFormat" class="setting-label">Target Format</label>
+              <select id="targetFormat" class="brutal-select">
+                <option value="image/webp" selected>WebP (.webp)</option>
+                <option value="image/jpeg">JPEG (.jpg)</option>
+                <option value="image/png">PNG (.png)</option>
+                <option value="image/avif">AVIF (.avif)</option>
               </select>
             </div>
 
-            <div class="setting-group dim-inputs">
-              <div>
-                <label for="thumbWidth" class="setting-label">Width (px)</label>
-                <input type="number" id="thumbWidth" class="brutal-input" value="150" min="16" max="2048" disabled>
-              </div>
-              <div>
-                <label for="thumbHeight" class="setting-label">Height (px)</label>
-                <input type="number" id="thumbHeight" class="brutal-input" value="150" min="16" max="2048" disabled>
-              </div>
-            </div>
-
+            <!-- Quality Slider -->
             <div class="setting-group">
-              <label for="thumbFit" class="setting-label">Aspect Ratio Mode</label>
-              <select id="thumbFit" class="brutal-select">
-                <option value="contain" selected>Contain (Fit inside box)</option>
-                <option value="cover">Cover (Crop to fill)</option>
-                <option value="stretch">Stretch (Exact pixels)</option>
-              </select>
+              <label for="qualitySlider" class="setting-label">Quality Level</label>
+              <div class="range-wrap">
+                <input type="range" id="qualitySlider" class="brutal-range" min="10" max="100" value="80" step="5">
+                <span id="qualityValue" class="range-val">80%</span>
+              </div>
+              <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.3rem;">
+                Higher quality increases output file size. PNG is always lossless.
+              </p>
+            </div>
+
+            <!-- Thumbnail Settings -->
+            <div class="setting-group">
+              <label class="checkbox-wrap">
+                <input type="checkbox" id="generateThumb" class="brutal-checkbox" checked>
+                <span>Generate Thumbnail Previews</span>
+              </label>
+            </div>
+
+            <div id="thumbSettingsGroup">
+              <div class="setting-group">
+                <label for="thumbPreset" class="setting-label">Thumbnail Size Preset</label>
+                <select id="thumbPreset" class="brutal-select">
+                  <option value="150x150" selected>150 × 150 px (Square)</option>
+                  <option value="256x256">256 × 256 px (Medium)</option>
+                  <option value="512x512">512 × 512 px (Large)</option>
+                  <option value="custom">Custom Dimensions</option>
+                </select>
+              </div>
+
+              <div class="setting-group dim-inputs">
+                <div>
+                  <label for="thumbWidth" class="setting-label">Width (px)</label>
+                  <input type="number" id="thumbWidth" class="brutal-input" value="150" min="16" max="2048" disabled>
+                </div>
+                <div>
+                  <label for="thumbHeight" class="setting-label">Height (px)</label>
+                  <input type="number" id="thumbHeight" class="brutal-input" value="150" min="16" max="2048" disabled>
+                </div>
+              </div>
+
+              <div class="setting-group">
+                <label for="thumbFit" class="setting-label">Aspect Ratio Mode</label>
+                <select id="thumbFit" class="brutal-select">
+                  <option value="contain" selected>Contain (Fit inside box)</option>
+                  <option value="cover">Cover (Crop to fill)</option>
+                  <option value="stretch">Stretch (Exact pixels)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Conversion & Download Actions -->
+            <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.5rem;">
+              <button id="convertBtn" class="brutal-btn btn-lime" style="width: 100%; font-size: 1.1rem; padding: 0.85rem;" disabled>
+                🚀 Convert All Images
+              </button>
+              <button id="downloadZipBtn" class="brutal-btn btn-yellow" style="width: 100%; font-size: 1rem; padding: 0.75rem;" disabled>
+                📦 Download ZIP Archive
+              </button>
+            </div>
+
+          </div>
+        </aside>
+
+      </main>
+
+    </div>
+    <!-- /imageTabPanel -->
+
+    <!-- ══════════════ VIDEO TAB ══════════════ -->
+    <div id="videoTabPanel" role="tabpanel" style="display: none;">
+
+      <main class="main-grid">
+
+        <!-- Left Column: Video Upload Dropzone & Queue -->
+        <section class="queue-section" aria-labelledby="videoQueueHeading">
+
+          <!-- Drag & Drop Zone -->
+          <div id="videoDropzone" class="dropzone" role="region" aria-label="Drag and drop video upload area" tabindex="0">
+            <input type="file" id="videoFileInput" multiple
+              accept="video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska,video/ogg,.mp4,.webm,.mov,.avi,.mkv,.ogv,.mpeg,.mpg,.m4v,.3gp"
+              style="display: none;">
+            <div class="dropzone-icon">🎬</div>
+            <h2 class="dropzone-title">Drag &amp; Drop Videos Here</h2>
+            <p class="dropzone-hint">or click anywhere to browse your files</p>
+            <div class="dropzone-formats">
+              <span class="badge">MP4</span>
+              <span class="badge">WEBM</span>
+              <span class="badge">MOV</span>
+              <span class="badge">AVI</span>
+              <span class="badge">MKV</span>
+              <span class="badge">OGV</span>
             </div>
           </div>
 
-          <!-- Conversion & Download Actions -->
-          <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.5rem;">
-            <button id="convertBtn" class="brutal-btn btn-lime" style="width: 100%; font-size: 1.1rem; padding: 0.85rem;" disabled>
-              🚀 Convert All Images
-            </button>
-            <button id="downloadZipBtn" class="brutal-btn btn-yellow" style="width: 100%; font-size: 1rem; padding: 0.75rem;" disabled>
-              📦 Download ZIP Archive
-            </button>
+          <!-- Video Progress Card -->
+          <div id="videoProgressCard" class="progress-card" style="display: none; background-color: var(--accent-purple); color: #fff;">
+            <div style="font-weight: 900; font-size: 1.05rem; display: flex; justify-content: space-between; align-items: center;">
+              <span>🎬 Compressing Video...</span>
+              <span id="videoProgressText" style="font-family: var(--font-mono); font-size: 0.85rem;">0 / 0</span>
+            </div>
+            <div class="progress-bar-outer" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="videoProgressBarInner" class="progress-bar-inner" style="background-color: var(--accent-cyan);"></div>
+            </div>
+            <p id="videoProgressLog" style="font-family: var(--font-mono); font-size: 0.7rem; margin-top: 0.5rem; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></p>
           </div>
 
-        </div>
-      </aside>
+          <!-- Queue Header Controls -->
+          <div id="videoQueueControls" class="queue-controls" style="display: none; margin-top: 1.5rem;">
+            <div class="queue-count">
+              <span id="videoQueueHeading" class="section-title" style="border: none; padding: 0; margin: 0; display: inline;">Video Queue</span>
+              <span id="videoQueueCountBadge" class="badge" style="background-color: var(--accent-purple); color: #fff; margin-left: 0.5rem;">0 Files</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button id="videoAddMoreBtn" class="brutal-btn btn-sm btn-cyan">➕ Add More</button>
+              <button id="videoClearQueueBtn" class="brutal-btn btn-sm btn-pink">🗑️ Clear Queue</button>
+            </div>
+          </div>
 
-    </main>
+          <!-- Video Queue List -->
+          <div id="videoQueueList" class="queue-list" style="margin-top: 1rem;"></div>
+
+          <!-- Video Empty State -->
+          <div id="videoEmptyState" class="empty-state" style="margin-top: 1.5rem;">
+            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎬</div>
+            <p class="empty-title">No Videos Queued Yet</p>
+            <p style="font-size: 0.9rem; color: var(--text-muted);">
+              Drop <code>.mp4</code>, <code>.webm</code>, <code>.mov</code>, <code>.avi</code>, <code>.mkv</code> etc. above to compress and generate thumbnails.
+            </p>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">
+              ⚠️ Compression uses <strong>FFmpeg WASM</strong> — loaded on first use (~30 MB). Runs entirely in your browser.
+            </p>
+          </div>
+
+        </section>
+
+        <!-- Right Column: Video Settings -->
+        <aside class="settings-sidebar">
+          <div class="brutal-card">
+            <h2 class="section-title">
+              <span>⚙️ Video Settings</span>
+            </h2>
+
+            <!-- Output Format -->
+            <div class="setting-group">
+              <label for="videoTargetFormat" class="setting-label">Output Format</label>
+              <select id="videoTargetFormat" class="brutal-select">
+                <option value="video/mp4" selected>MP4 (H.264 + AAC)</option>
+                <option value="video/webm">WebM (VP9 + Opus)</option>
+              </select>
+              <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.3rem;">
+                MP4 has the widest device compatibility.
+              </p>
+            </div>
+
+            <!-- CRF / Quality -->
+            <div class="setting-group">
+              <label for="videoCrfSlider" class="setting-label">Quality (CRF)</label>
+              <div class="range-wrap">
+                <input type="range" id="videoCrfSlider" class="brutal-range" min="0" max="51" value="23" step="1">
+                <span id="videoCrfValue" class="range-val">23</span>
+              </div>
+              <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.3rem;">
+                Lower CRF = better quality &amp; larger file. 18–28 is typical. 0 is lossless.
+              </p>
+            </div>
+
+            <!-- Encoding Preset -->
+            <div class="setting-group">
+              <label for="videoPreset" class="setting-label">Encoding Speed</label>
+              <select id="videoPreset" class="brutal-select">
+                <option value="ultrafast">Ultra Fast (lowest compression)</option>
+                <option value="superfast">Super Fast</option>
+                <option value="veryfast">Very Fast</option>
+                <option value="fast" selected>Fast (recommended)</option>
+                <option value="medium">Medium</option>
+                <option value="slow">Slow (best compression)</option>
+              </select>
+              <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.3rem;">
+                Slower presets take longer but compress more.
+              </p>
+            </div>
+
+            <!-- Thumbnail -->
+            <div class="setting-group">
+              <label class="checkbox-wrap">
+                <input type="checkbox" id="videoGenerateThumb" class="brutal-checkbox" checked>
+                <span>Generate Video Thumbnail</span>
+              </label>
+              <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.3rem;">
+                Click 🎞️ on any queued video to pick a frame via the scrubber.
+              </p>
+            </div>
+
+            <!-- Actions -->
+            <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.5rem;">
+              <button id="videoConvertBtn" class="brutal-btn btn-purple" style="width: 100%; font-size: 1.1rem; padding: 0.85rem;" disabled>
+                🚀 Compress All Videos
+              </button>
+              <button id="videoDownloadZipBtn" class="brutal-btn btn-yellow" style="width: 100%; font-size: 1rem; padding: 0.75rem;" disabled>
+                📦 Download ZIP Archive
+              </button>
+            </div>
+
+            <!-- FFmpeg info note -->
+            <div class="info-note" style="margin-top: 1.25rem;">
+              <p style="font-size: 0.78rem; font-weight: 700;">ℹ️ About FFmpeg WASM</p>
+              <p style="font-size: 0.73rem; color: var(--text-muted); margin-top: 0.2rem;">
+                This tool uses <strong>@ffmpeg/ffmpeg</strong> — a WebAssembly port running entirely in your browser. No video is uploaded to any server. First load downloads ~30 MB of WASM binaries from unpkg.com (cached after that).
+              </p>
+            </div>
+
+          </div>
+        </aside>
+
+      </main>
+
+    </div>
+    <!-- /videoTabPanel -->
 
     <!-- Footer -->
     <footer>
