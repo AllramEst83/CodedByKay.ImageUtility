@@ -284,6 +284,16 @@ body {
   outline: none;
 }
 
+.brutal-select option, .brutal-select optgroup {
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+}
+
+.brutal-select optgroup {
+  font-weight: 800;
+}
+
 .brutal-select:focus, .brutal-input:focus {
   background-color: var(--accent-yellow);
   color: #000000;

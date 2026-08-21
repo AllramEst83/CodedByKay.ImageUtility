@@ -18,9 +18,9 @@ const state = {
     targetFormat: 'image/webp',
     quality: 0.8,
     generateThumb: true,
-    thumbPreset: '150x150',
-    thumbWidth: 150,
-    thumbHeight: 150,
+    thumbPreset: '300x200',
+    thumbWidth: 300,
+    thumbHeight: 200,
     thumbFit: 'contain',
     // Video settings
     videoTargetFormat: 'video/mp4',
@@ -175,7 +175,25 @@ function attachEventListeners() {
   thumbPresetSelect.addEventListener('change', (e) => {
     const val = e.target.value;
     state.settings.thumbPreset = val;
-    if (val !== 'custom') {
+    if (val.startsWith('original-')) {
+      if (val === 'original-50pct') {
+        thumbWidthInput.value = 50;
+        thumbHeightInput.value = 50;
+      } else if (val === 'original-25pct') {
+        thumbWidthInput.value = 25;
+        thumbHeightInput.value = 25;
+      } else {
+        const maxDim = parseInt(val.replace('original-', ''), 10) || 300;
+        thumbWidthInput.value = maxDim;
+        thumbHeightInput.value = maxDim;
+        state.settings.thumbWidth = maxDim;
+        state.settings.thumbHeight = maxDim;
+      }
+      thumbWidthInput.disabled = true;
+      thumbHeightInput.disabled = true;
+      thumbFitSelect.value = 'contain';
+      state.settings.thumbFit = 'contain';
+    } else if (val !== 'custom') {
       const [w, h] = val.split('x').map(Number);
       thumbWidthInput.value = w;
       thumbHeightInput.value = h;
@@ -190,11 +208,11 @@ function attachEventListeners() {
   });
 
   thumbWidthInput.addEventListener('input', (e) => {
-    state.settings.thumbWidth = parseInt(e.target.value, 10) || 150;
+    state.settings.thumbWidth = parseInt(e.target.value, 10) || 300;
   });
 
   thumbHeightInput.addEventListener('input', (e) => {
-    state.settings.thumbHeight = parseInt(e.target.value, 10) || 150;
+    state.settings.thumbHeight = parseInt(e.target.value, 10) || 200;
   });
 
   thumbFitSelect.addEventListener('change', (e) => {
@@ -548,6 +566,7 @@ async function startBatchConversion() {
         targetFormat: state.settings.targetFormat,
         quality: state.settings.quality,
         generateThumb: state.settings.generateThumb,
+        thumbPreset: state.settings.thumbPreset,
         thumbWidth: state.settings.thumbWidth,
         thumbHeight: state.settings.thumbHeight,
         thumbFit: state.settings.thumbFit

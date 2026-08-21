@@ -52,8 +52,9 @@ export async function convertImage(img, options) {
     targetFormat = 'image/webp',
     quality = 0.8,
     generateThumb = true,
-    thumbWidth = 150,
-    thumbHeight = 150,
+    thumbPreset = '300x200',
+    thumbWidth = 300,
+    thumbHeight = 200,
     thumbFit = 'contain'
   } = options;
 
@@ -90,7 +91,39 @@ export async function convertImage(img, options) {
     const thumbCtx = thumbCanvas.getContext('2d');
     if (!thumbCtx) throw new Error('Could not create thumbnail 2D canvas context');
 
-    if (thumbFit === 'contain') {
+    if (thumbPreset === 'original-50pct') {
+      actualThumbW = Math.max(1, Math.round(originalWidth * 0.5));
+      actualThumbH = Math.max(1, Math.round(originalHeight * 0.5));
+
+      thumbCanvas.width = actualThumbW;
+      thumbCanvas.height = actualThumbH;
+
+      if (targetFormat === 'image/jpeg') {
+        thumbCtx.fillStyle = '#FFFFFF';
+        thumbCtx.fillRect(0, 0, actualThumbW, actualThumbH);
+      }
+
+      thumbCtx.imageSmoothingEnabled = true;
+      thumbCtx.imageSmoothingQuality = 'high';
+      thumbCtx.drawImage(img, 0, 0, actualThumbW, actualThumbH);
+
+    } else if (thumbPreset === 'original-25pct') {
+      actualThumbW = Math.max(1, Math.round(originalWidth * 0.25));
+      actualThumbH = Math.max(1, Math.round(originalHeight * 0.25));
+
+      thumbCanvas.width = actualThumbW;
+      thumbCanvas.height = actualThumbH;
+
+      if (targetFormat === 'image/jpeg') {
+        thumbCtx.fillStyle = '#FFFFFF';
+        thumbCtx.fillRect(0, 0, actualThumbW, actualThumbH);
+      }
+
+      thumbCtx.imageSmoothingEnabled = true;
+      thumbCtx.imageSmoothingQuality = 'high';
+      thumbCtx.drawImage(img, 0, 0, actualThumbW, actualThumbH);
+
+    } else if (thumbFit === 'contain' || thumbPreset.startsWith('original-')) {
       const scale = Math.min(thumbWidth / originalWidth, thumbHeight / originalHeight);
       actualThumbW = Math.max(1, Math.round(originalWidth * scale));
       actualThumbH = Math.max(1, Math.round(originalHeight * scale));
