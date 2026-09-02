@@ -601,3 +601,11 @@ footer a {
   text-decoration: underline;
 }
 
+.footer-version {
+  margin-top: 0.35rem;
+  font-weight: 600;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  opacity: 0.45;
+}
+
