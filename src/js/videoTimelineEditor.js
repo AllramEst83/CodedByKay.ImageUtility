@@ -92,7 +92,7 @@ export function openVideoTimelineEditor(videoFile, videoName, existingSegments, 
     timeReadout.style.cssText = 'font-family: var(--font-mono); font-weight: 700; font-size: 0.85rem;';
     timeReadout.textContent = '0:00.0 / 0:00.0';
 
-    // Preview playback speed stepper (affects preview only, not the exported file).
+    // Playback speed stepper — affects both the preview and the exported file.
     const speedWrap = document.createElement('div');
     speedWrap.style.cssText = 'display: flex; align-items: center; gap: 0.4rem; margin-left: auto;';
 
@@ -104,7 +104,7 @@ export function openVideoTimelineEditor(videoFile, videoName, existingSegments, 
     speedDownBtn.type = 'button';
     speedDownBtn.className = 'brutal-btn btn-sm btn-dark';
     speedDownBtn.textContent = '−';
-    speedDownBtn.title = 'Slow down preview playback';
+    speedDownBtn.title = 'Slow down playback (and the exported video)';
 
     const speedReadout = document.createElement('span');
     speedReadout.style.cssText = 'font-family: var(--font-mono); font-weight: 700; font-size: 0.85rem; min-width: 3.2em; text-align: center;';
@@ -114,12 +114,17 @@ export function openVideoTimelineEditor(videoFile, videoName, existingSegments, 
     speedUpBtn.type = 'button';
     speedUpBtn.className = 'brutal-btn btn-sm btn-dark';
     speedUpBtn.textContent = '+';
-    speedUpBtn.title = 'Speed up preview playback';
+    speedUpBtn.title = 'Speed up playback (and the exported video)';
+
+    const speedOutputReadout = document.createElement('span');
+    speedOutputReadout.style.cssText = 'font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-muted);';
+    speedOutputReadout.textContent = '';
 
     speedWrap.appendChild(speedLabel);
     speedWrap.appendChild(speedDownBtn);
     speedWrap.appendChild(speedReadout);
     speedWrap.appendChild(speedUpBtn);
+    speedWrap.appendChild(speedOutputReadout);
 
     playbackBar.appendChild(playBtn);
     playbackBar.appendChild(timeReadout);
@@ -266,6 +271,13 @@ export function openVideoTimelineEditor(videoFile, videoName, existingSegments, 
       playbackSpeed = Math.max(SPEED_MIN, Math.min(SPEED_MAX, speed));
       video.playbackRate = playbackSpeed;
       speedReadout.textContent = `${playbackSpeed.toFixed(playbackSpeed % 1 === 0 ? 0 : 2)}x`;
+      updateSpeedOutputReadout();
+    }
+
+    function updateSpeedOutputReadout() {
+      if (!segments || !segments.length) { speedOutputReadout.textContent = ''; return; }
+      const outputLen = totalSeqDuration() / playbackSpeed;
+      speedOutputReadout.textContent = playbackSpeed === 1 ? '' : `→ ${formatTime(outputLen)} output`;
     }
 
     function totalSeqDuration() {
@@ -326,6 +338,8 @@ export function openVideoTimelineEditor(videoFile, videoName, existingSegments, 
       timelineLabel.textContent = segments
         ? `Timeline — ${segments.length} clip${segments.length === 1 ? '' : 's'}, ${formatTime(total)} total (source is ${formatTime(duration)})`
         : 'Timeline';
+
+      updateSpeedOutputReadout();
     }
 
     function render() {
