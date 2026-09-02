@@ -9,6 +9,9 @@
 const MIN_SEG = 0.08; // seconds — smallest clip a split/drag/paste can produce
 const EDGE_EPS = 0.05; // seconds — treated as "touching the edge" for snapping/no-op checks
 const FRAME_STEP = 1 / 30; // seconds — approximate single-frame step for arrow-key nudging
+const SPEED_MIN = 0.25;
+const SPEED_MAX = 10;
+const SPEED_STEP = 0.25;
 const SEG_COLORS = ['--accent-cyan', '--accent-lime', '--accent-yellow', '--accent-purple', '--accent-pink', '--accent-orange'];
 
 function formatTime(s) {
@@ -88,8 +91,38 @@ export function openVideoTimelineEditor(videoFile, videoName, existingSegments) 
     timeReadout.style.cssText = 'font-family: var(--font-mono); font-weight: 700; font-size: 0.85rem;';
     timeReadout.textContent = '0:00.0 / 0:00.0';
 
+    // Preview playback speed stepper (affects preview only, not the exported file).
+    const speedWrap = document.createElement('div');
+    speedWrap.style.cssText = 'display: flex; align-items: center; gap: 0.4rem; margin-left: auto;';
+
+    const speedLabel = document.createElement('span');
+    speedLabel.style.cssText = 'font-weight: 800; font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted);';
+    speedLabel.textContent = 'Speed';
+
+    const speedDownBtn = document.createElement('button');
+    speedDownBtn.type = 'button';
+    speedDownBtn.className = 'brutal-btn btn-sm btn-dark';
+    speedDownBtn.textContent = '−';
+    speedDownBtn.title = 'Slow down preview playback';
+
+    const speedReadout = document.createElement('span');
+    speedReadout.style.cssText = 'font-family: var(--font-mono); font-weight: 700; font-size: 0.85rem; min-width: 3.2em; text-align: center;';
+    speedReadout.textContent = '1x';
+
+    const speedUpBtn = document.createElement('button');
+    speedUpBtn.type = 'button';
+    speedUpBtn.className = 'brutal-btn btn-sm btn-dark';
+    speedUpBtn.textContent = '+';
+    speedUpBtn.title = 'Speed up preview playback';
+
+    speedWrap.appendChild(speedLabel);
+    speedWrap.appendChild(speedDownBtn);
+    speedWrap.appendChild(speedReadout);
+    speedWrap.appendChild(speedUpBtn);
+
     playbackBar.appendChild(playBtn);
     playbackBar.appendChild(timeReadout);
+    playbackBar.appendChild(speedWrap);
 
     // Timeline label
     const timelineLabel = document.createElement('div');
@@ -219,11 +252,18 @@ export function openVideoTimelineEditor(videoFile, videoName, existingSegments) 
     let playheadSeqTime = 0;
     let currentPlaybackIndex = 0;
     let statusTimer = null;
+    let playbackSpeed = 1;
 
     function flashStatus(msg) {
       statusLine.textContent = msg;
       if (statusTimer) clearTimeout(statusTimer);
       statusTimer = setTimeout(() => { statusLine.textContent = ''; }, 2600);
+    }
+
+    function setPlaybackSpeed(speed) {
+      playbackSpeed = Math.max(SPEED_MIN, Math.min(SPEED_MAX, speed));
+      video.playbackRate = playbackSpeed;
+      speedReadout.textContent = `${playbackSpeed.toFixed(playbackSpeed % 1 === 0 ? 0 : 2)}x`;
     }
 
     function totalSeqDuration() {
@@ -507,6 +547,8 @@ export function openVideoTimelineEditor(videoFile, videoName, existingSegments) 
 
     // ── Button wiring ──────────────────────────────────────────────────────
     playBtn.addEventListener('click', playPause);
+    speedDownBtn.addEventListener('click', () => setPlaybackSpeed(playbackSpeed - SPEED_STEP));
+    speedUpBtn.addEventListener('click', () => setPlaybackSpeed(playbackSpeed + SPEED_STEP));
     splitBtn.addEventListener('click', splitAtPlayhead);
     deleteBtn.addEventListener('click', deleteSelected);
     copyBtn.addEventListener('click', copySelected);
