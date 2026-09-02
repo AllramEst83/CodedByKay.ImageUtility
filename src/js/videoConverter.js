@@ -64,15 +64,43 @@ export async function getFFmpeg(onLog) {
  * @param {'video/mp4'|'video/webm'} options.targetFormat - output container/codec
  * @param {number} options.crf - quality (0-51 for x264/5, lower = better; 18-28 recommended)
  * @param {string} options.preset - ffmpeg x264 preset (e.g. 'fast', 'medium', 'slow')
+ * @param {Array<{sourceStart:number, sourceEnd:number}>|null} [options.segments] - ordered list of
+ *   source time ranges to stitch together (from the timeline editor). null/empty means no edits —
+ *   the whole source file is transcoded as-is.
  * @param {function(number): void} [options.onProgress] - progress callback 0-100
  * @param {function(string): void} [options.onLog] - log callback
  * @returns {Promise<{blob: Blob, size: number, ext: string}>}
  */
+/**
+ * Probe whether the input (already written to ffmpeg's virtual FS) has an
+ * audio stream, by running an output-less `-i` pass and scanning its log
+ * output for an "Audio:" stream line. Needed because the multi-clip filter
+ * graph below references `[0:a]` explicitly — doing so on a video with no
+ * audio track aborts ffmpeg with no output file at all.
+ * @param {FFmpeg} ff
+ * @param {string} inputName
+ * @returns {Promise<boolean>}
+ */
+async function probeHasAudio(ff, inputName) {
+  let hasAudio = false;
+  const handler = ({ message }) => {
+    if (/Stream #\d+:\d+.*: Audio:/.test(message)) hasAudio = true;
+  };
+  ff.on('log', handler);
+  try {
+    await ff.exec(['-i', inputName]);
+  } finally {
+    ff.off('log', handler);
+  }
+  return hasAudio;
+}
+
 export async function compressVideo(file, options = {}) {
   const {
     targetFormat = 'video/mp4',
     crf = 23,
     preset = 'fast',
+    segments = null,
     onProgress,
     onLog
   } = options;
@@ -85,62 +113,99 @@ export async function compressVideo(file, options = {}) {
   const inputName = `input.${file.name.split('.').pop().toLowerCase()}`;
   const outputName = `output.${ext}`;
 
-  // Write input file to ffmpeg's virtual FS
-  await ff.writeFile(inputName, await fetchFile(file));
-
-  // Listen to progress
-  if (onProgress) {
-    ff.on('progress', ({ progress }) => {
-      onProgress(Math.min(99, Math.round(progress * 100)));
-    });
-  }
-
-  // Build ffmpeg args
-  let args;
-  if (isWebm) {
-    // VP9 for webm
-    args = [
-      '-i', inputName,
-      '-c:v', 'libvpx-vp9',
-      '-crf', String(crf),
-      '-b:v', '0',
-      '-c:a', 'libopus',
-      '-b:a', '128k',
-      '-y',
-      outputName
-    ];
-  } else {
-    // H.264 for mp4
-    args = [
-      '-i', inputName,
-      '-c:v', 'libx264',
-      '-crf', String(crf),
-      '-preset', preset,
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-movflags', '+faststart',
-      '-y',
-      outputName
-    ];
-  }
-
-  await ff.exec(args);
-
-  // Read output
-  const data = await ff.readFile(outputName);
-  const blob = new Blob([data.buffer], { type: targetFormat });
-
-  // Cleanup virtual FS
-  try { await ff.deleteFile(inputName); } catch (_) {}
-  try { await ff.deleteFile(outputName); } catch (_) {}
-
-  if (onProgress) onProgress(100);
-
-  return {
-    blob,
-    size: blob.size,
-    ext
+  // Track recent ffmpeg log lines so a failure can report something useful
+  // instead of a bare "FS error" from a readFile on a file that never got written.
+  const recentLogs = [];
+  const logCapture = ({ message }) => {
+    recentLogs.push(message);
+    if (recentLogs.length > 15) recentLogs.shift();
   };
+  ff.on('log', logCapture);
+
+  const onProgressWrapped = onProgress
+    ? ({ progress }) => onProgress(Math.min(99, Math.round(progress * 100)))
+    : null;
+  if (onProgressWrapped) ff.on('progress', onProgressWrapped);
+
+  try {
+    // Write input file to ffmpeg's virtual FS
+    await ff.writeFile(inputName, await fetchFile(file));
+
+    const hasEdits = Array.isArray(segments) && segments.length > 0;
+
+    const videoCodecArgs = isWebm
+      ? ['-c:v', 'libvpx-vp9', '-crf', String(crf), '-b:v', '0', '-c:a', 'libopus', '-b:a', '128k']
+      : ['-c:v', 'libx264', '-crf', String(crf), '-preset', preset, '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart'];
+
+    let args;
+
+    if (!hasEdits) {
+      args = ['-i', inputName, ...videoCodecArgs, '-y', outputName];
+    } else if (segments.length === 1) {
+      // Single range: -ss before -i does a fast input seek; -t (duration) after
+      // -i trims relative to that seeked start, which is what we want.
+      const { sourceStart, sourceEnd } = segments[0];
+      const trimInArgs = sourceStart > 0 ? ['-ss', String(sourceStart)] : [];
+      const trimOutArgs = ['-t', String(sourceEnd - sourceStart)];
+
+      args = [
+        ...trimInArgs,
+        '-i', inputName,
+        ...trimOutArgs,
+        ...videoCodecArgs,
+        '-y',
+        outputName
+      ];
+    } else {
+      // Multiple clips from the timeline editor: trim each range with filters
+      // and concatenate them back together in sequence order. Skip the audio
+      // leg entirely when the source has no audio stream (referencing [0:a]
+      // on an audio-less input aborts ffmpeg with no output file).
+      const hasAudio = await probeHasAudio(ff, inputName);
+
+      const filterParts = [];
+      segments.forEach((seg, i) => {
+        filterParts.push(`[0:v]trim=start=${seg.sourceStart}:end=${seg.sourceEnd},setpts=PTS-STARTPTS[v${i}]`);
+        if (hasAudio) {
+          filterParts.push(`[0:a]atrim=start=${seg.sourceStart}:end=${seg.sourceEnd},asetpts=PTS-STARTPTS[a${i}]`);
+        }
+      });
+      const concatInputs = segments.map((_, i) => hasAudio ? `[v${i}][a${i}]` : `[v${i}]`).join('');
+      filterParts.push(`${concatInputs}concat=n=${segments.length}:v=1:a=${hasAudio ? 1 : 0}[outv]${hasAudio ? '[outa]' : ''}`);
+
+      args = [
+        '-i', inputName,
+        '-filter_complex', filterParts.join(';'),
+        '-map', '[outv]',
+        ...(hasAudio ? ['-map', '[outa]'] : []),
+        ...videoCodecArgs,
+        '-y',
+        outputName
+      ];
+    }
+
+    const exitCode = await ff.exec(args);
+    if (exitCode !== 0) {
+      throw new Error(`FFmpeg failed (exit ${exitCode}): ${recentLogs.slice(-4).join(' | ') || 'no output produced'}`);
+    }
+
+    // Read output
+    const data = await ff.readFile(outputName);
+    const blob = new Blob([data.buffer], { type: targetFormat });
+
+    if (onProgress) onProgress(100);
+
+    return {
+      blob,
+      size: blob.size,
+      ext
+    };
+  } finally {
+    ff.off('log', logCapture);
+    if (onProgressWrapped) ff.off('progress', onProgressWrapped);
+    try { await ff.deleteFile(inputName); } catch (_) {}
+    try { await ff.deleteFile(outputName); } catch (_) {}
+  }
 }
 
 /**

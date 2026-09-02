@@ -7,6 +7,7 @@ import { loadImageFile, convertImage } from './converter.js';
 import { createZipArchive, triggerDownload, getExtensionForMime } from './zip.js';
 import { compressVideo, isVideoFile, getFFmpeg } from './videoConverter.js';
 import { openVideoThumbnailScrubber } from './videoThumbnail.js';
+import { openVideoTimelineEditor } from './videoTimelineEditor.js';
 
 // Application State
 const state = {
@@ -35,7 +36,7 @@ let dropzone, fileInput, queueList, emptyState, queueControls;
 let targetFormatSelect, qualitySlider, qualityValue, generateThumbCheckbox;
 let thumbPresetSelect, thumbWidthInput, thumbHeightInput, thumbFitSelect;
 let convertBtn, downloadZipBtn, clearQueueBtn, addMoreBtn, themeToggleBtn;
-let progressCard, progressBarInner, progressText;
+let progressCard, progressBarInner, progressText, progressLabel;
 let previewModal, previewModalTitle, previewModalBody, closeModalBtn;
 
 // DOM Elements — tabs
@@ -47,7 +48,7 @@ let videoCrfSlider, videoCrfValue, videoPresetSelect;
 let videoGenerateThumbCheckbox;
 let videoConvertBtn, videoDownloadZipBtn, videoClearQueueBtn, videoAddMoreBtn;
 let videoQueueList, videoEmptyState, videoQueueControls, videoProgressCard;
-let videoProgressBarInner, videoProgressText, videoProgressLog;
+let videoProgressBarInner, videoProgressText, videoProgressLog, videoProgressLabel;
 
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
@@ -86,6 +87,7 @@ function bindDOMElements() {
   progressCard = document.getElementById('progressCard');
   progressBarInner = document.getElementById('progressBarInner');
   progressText = document.getElementById('progressText');
+  progressLabel = document.getElementById('progressLabel');
   previewModal = document.getElementById('previewModal');
   previewModalTitle = document.getElementById('previewModalTitle');
   previewModalBody = document.getElementById('previewModalBody');
@@ -109,6 +111,7 @@ function bindDOMElements() {
   videoProgressCard = document.getElementById('videoProgressCard');
   videoProgressBarInner = document.getElementById('videoProgressBarInner');
   videoProgressText = document.getElementById('videoProgressText');
+  videoProgressLabel = document.getElementById('videoProgressLabel');
   videoProgressLog = document.getElementById('videoProgressLog');
 }
 
@@ -124,6 +127,14 @@ function attachEventListeners() {
     tabVideoBtn.addEventListener('click', () => switchTab('video'));
   }
 
+  // ── Auto-switch tab based on what's being dragged in, before it's dropped ──
+  document.addEventListener('dragenter', (e) => {
+    const kind = classifyDragTypes(e.dataTransfer);
+    if (kind && kind !== state.activeTab) {
+      switchTab(kind);
+    }
+  });
+
   // ── Image dropzone ─────────────────────────────────────────────────────
   dropzone.addEventListener('click', () => fileInput.click());
   dropzone.addEventListener('dragover', (e) => {
@@ -134,9 +145,15 @@ function attachEventListeners() {
   dropzone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropzone.classList.remove('dragover');
-    if (e.dataTransfer.files?.length > 0) {
-      handleFilesAdded(Array.from(e.dataTransfer.files));
+    if (!(e.dataTransfer.files?.length > 0)) return;
+
+    const { images, videos, other } = splitFilesByType(Array.from(e.dataTransfer.files));
+    if (images.length) handleFilesAdded(images);
+    if (videos.length) {
+      switchTab('video');
+      handleVideoFilesAdded(videos);
     }
+    if (other.length) handleFilesAdded(other); // let it report the "skipped" toasts
   });
 
   fileInput.addEventListener('change', (e) => {
@@ -245,9 +262,15 @@ function attachEventListeners() {
     videoDropzone.addEventListener('drop', (e) => {
       e.preventDefault();
       videoDropzone.classList.remove('dragover');
-      if (e.dataTransfer.files?.length > 0) {
-        handleVideoFilesAdded(Array.from(e.dataTransfer.files));
+      if (!(e.dataTransfer.files?.length > 0)) return;
+
+      const { images, videos, other } = splitFilesByType(Array.from(e.dataTransfer.files));
+      if (videos.length) handleVideoFilesAdded(videos);
+      if (images.length) {
+        switchTab('image');
+        handleFilesAdded(images);
       }
+      if (other.length) handleVideoFilesAdded(other); // let it report the "skipped" toasts
     });
 
     videoFileInput.addEventListener('change', (e) => {
@@ -300,23 +323,68 @@ function switchTab(tab) {
   }
 }
 
+const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.avif'];
+
+/**
+ * Check if a File is a supported image
+ * @param {File} file
+ * @returns {boolean}
+ */
+function isImageFile(file) {
+  const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+  return IMAGE_MIMES.includes(file.type) || IMAGE_EXTENSIONS.includes(fileExt);
+}
+
+/**
+ * Split a dropped/selected file list into image and video buckets. Files
+ * matching neither are left out of both (their handler will report them).
+ * @param {File[]} files
+ * @returns {{ images: File[], videos: File[], other: File[] }}
+ */
+function splitFilesByType(files) {
+  const images = [];
+  const videos = [];
+  const other = [];
+  files.forEach((file) => {
+    if (isImageFile(file)) images.push(file);
+    else if (isVideoFile(file)) videos.push(file);
+    else other.push(file);
+  });
+  return { images, videos, other };
+}
+
+/**
+ * Peek at an in-progress drag's file types (before drop) using the browser's
+ * partial DataTransferItem info, to proactively switch to the matching tab.
+ * @param {DataTransfer} dataTransfer
+ * @returns {'image'|'video'|null} null when mixed, empty, or undetermined
+ */
+function classifyDragTypes(dataTransfer) {
+  if (!dataTransfer || !dataTransfer.items) return null;
+  let hasImage = false;
+  let hasVideo = false;
+  for (const item of dataTransfer.items) {
+    if (item.kind !== 'file') continue;
+    if (item.type && item.type.startsWith('image/')) hasImage = true;
+    else if (item.type && item.type.startsWith('video/')) hasVideo = true;
+  }
+  if (hasVideo && !hasImage) return 'video';
+  if (hasImage && !hasVideo) return 'image';
+  return null;
+}
+
 // ── Image Queue ────────────────────────────────────────────────────────────
 
 /**
  * Handle addition of new image files into queue
- * @param {File[]} files 
+ * @param {File[]} files
  */
 function handleFilesAdded(files) {
-  const validMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
-  const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.avif'];
-
   let addedCount = 0;
 
   files.forEach((file) => {
-    const fileExt = '.' + file.name.split('.').pop().toLowerCase();
-    const isValidType = validMimes.includes(file.type) || validExtensions.includes(fileExt);
-
-    if (!isValidType) {
+    if (!isImageFile(file)) {
       showToast(`Skipped non-image file: ${file.name}`, 'error');
       return;
     }
@@ -327,7 +395,7 @@ function handleFilesAdded(files) {
       file,
       name: file.name,
       size: file.size,
-      type: file.type || 'image/' + fileExt.replace('.', ''),
+      type: file.type || 'image/' + file.name.split('.').pop().toLowerCase(),
       previewUrl: URL.createObjectURL(file),
       status: 'pending',
       dimensions: null
@@ -551,6 +619,7 @@ async function startBatchConversion() {
 
   progressCard.style.display = 'block';
   progressBarInner.style.width = '0%';
+  if (progressLabel) progressLabel.textContent = '⚡ Converting Batch...';
   progressText.textContent = `0 / ${state.queue.length} converted (0%)`;
 
   let completedCount = 0;
@@ -600,6 +669,8 @@ async function startBatchConversion() {
     progressText.textContent = `${completedCount} / ${state.queue.length} converted (${percent}%)`;
     renderQueueItem(item);
   }
+
+  if (progressLabel) progressLabel.textContent = '✅ Converting Done';
 
   state.isConverting = false;
   convertBtn.disabled = false;
@@ -748,6 +819,7 @@ function handleVideoFilesAdded(files) {
       thumbnailUrl: null,
       convertedBlob: null,
       convertedSize: null,
+      segments: null, // Array<{sourceStart, sourceEnd}> from the timeline editor; null = untouched/no edits
     };
 
     videoQueue.push(item);
@@ -880,12 +952,30 @@ function createVideoQueueItemElement(item) {
     metaEl.appendChild(thumbNote);
   }
 
+  if (item.segments && item.segments.length) {
+    const trimNote = document.createElement('span');
+    trimNote.className = 'badge';
+    trimNote.style.background = 'var(--accent-lime)';
+    trimNote.style.color = '#000';
+    trimNote.textContent = `✂️ ${formatSegmentsSummary(item)}`;
+    metaEl.appendChild(trimNote);
+  }
+
   details.appendChild(nameEl);
   details.appendChild(metaEl);
 
   // Actions
   const actions = document.createElement('div');
   actions.className = 'queue-item-actions';
+
+  // Timeline editor button
+  const editBtn = document.createElement('button');
+  editBtn.className = 'brutal-btn btn-sm btn-lime';
+  editBtn.innerHTML = '🎬 Edit';
+  editBtn.title = 'Cut, delete, copy/paste & reorder clips before compression';
+  editBtn.disabled = isVideoConverting;
+  editBtn.onclick = () => openTimelineEditor(item);
+  actions.appendChild(editBtn);
 
   // Thumbnail pick button
   const pickThumbBtn = document.createElement('button');
@@ -934,6 +1024,32 @@ function createVideoQueueItemElement(item) {
   card.appendChild(actions);
 
   return card;
+}
+
+/**
+ * Format a queue item's edited timeline as a short summary string for display
+ * @param {Object} item
+ * @returns {string}
+ */
+function formatSegmentsSummary(item) {
+  const totalSec = item.segments.reduce((sum, s) => sum + (s.sourceEnd - s.sourceStart), 0);
+  const m = Math.floor(totalSec / 60);
+  const sec = Math.floor(totalSec % 60);
+  const count = item.segments.length;
+  return `${count} clip${count === 1 ? '' : 's'}, ${m}:${sec.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Open the timeline editor modal for a video queue item
+ * @param {Object} item
+ */
+async function openTimelineEditor(item) {
+  const result = await openVideoTimelineEditor(item.file, item.name, item.segments);
+  if (result === false) return; // cancelled — leave item untouched
+
+  item.segments = result; // null (edits cleared) or an array of segments
+  showToast(result ? `Edits applied to "${item.name}"` : `Edits cleared for "${item.name}"`, 'success');
+  renderVideoQueueItem(item);
 }
 
 /**
@@ -994,6 +1110,7 @@ async function startVideoBatchCompression() {
 
   videoProgressCard.style.display = 'block';
   videoProgressBarInner.style.width = '0%';
+  if (videoProgressLabel) videoProgressLabel.textContent = '🎬 Compressing Video...';
   videoProgressText.textContent = `Loading FFmpeg WASM...`;
   videoProgressLog.textContent = '';
 
@@ -1027,6 +1144,7 @@ async function startVideoBatchCompression() {
         targetFormat: state.settings.videoTargetFormat,
         crf: state.settings.videoCrf,
         preset: state.settings.videoPreset,
+        segments: item.segments,
         onProgress: (pct) => {
           const overallPct = Math.round(((i + pct / 100) / total) * 100);
           videoProgressBarInner.style.width = `${overallPct}%`;
@@ -1053,6 +1171,7 @@ async function startVideoBatchCompression() {
 
   const overallPct = Math.round((completedCount / total) * 100);
   videoProgressBarInner.style.width = `${overallPct}%`;
+  if (videoProgressLabel) videoProgressLabel.textContent = '✅ Compressing Done';
   videoProgressText.textContent = `Done: ${completedCount} / ${total} compressed`;
   videoProgressLog.textContent = '';
 
