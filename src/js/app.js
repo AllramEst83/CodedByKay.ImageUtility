@@ -820,6 +820,7 @@ function handleVideoFilesAdded(files) {
       convertedBlob: null,
       convertedSize: null,
       segments: null, // Array<{sourceStart, sourceEnd}> from the timeline editor; null = untouched/no edits
+      playbackSpeed: 1, // from the timeline editor's speed control; 1 = normal speed
     };
 
     videoQueue.push(item);
@@ -961,6 +962,16 @@ function createVideoQueueItemElement(item) {
     metaEl.appendChild(trimNote);
   }
 
+  if (item.playbackSpeed && item.playbackSpeed !== 1) {
+    const speedNote = document.createElement('span');
+    speedNote.className = 'badge';
+    speedNote.style.background = 'var(--accent-purple)';
+    speedNote.style.color = '#fff';
+    const speedLabel = item.playbackSpeed % 1 === 0 ? item.playbackSpeed.toFixed(0) : item.playbackSpeed.toFixed(2);
+    speedNote.textContent = `⏩ ${speedLabel}x speed`;
+    metaEl.appendChild(speedNote);
+  }
+
   details.appendChild(nameEl);
   details.appendChild(metaEl);
 
@@ -1044,11 +1055,16 @@ function formatSegmentsSummary(item) {
  * @param {Object} item
  */
 async function openTimelineEditor(item) {
-  const result = await openVideoTimelineEditor(item.file, item.name, item.segments);
+  const result = await openVideoTimelineEditor(item.file, item.name, item.segments, item.playbackSpeed);
   if (result === false) return; // cancelled — leave item untouched
 
-  item.segments = result; // null (edits cleared) or an array of segments
-  showToast(result ? `Edits applied to "${item.name}"` : `Edits cleared for "${item.name}"`, 'success');
+  item.segments = result.segments; // null (cut edits cleared) or an array of segments
+  item.playbackSpeed = result.speed || 1;
+
+  const hasCuts = !!(item.segments && item.segments.length);
+  const hasSpeed = item.playbackSpeed !== 1;
+  const message = hasCuts || hasSpeed ? `Edits applied to "${item.name}"` : `Edits cleared for "${item.name}"`;
+  showToast(message, 'success');
   renderVideoQueueItem(item);
 }
 
@@ -1145,6 +1161,7 @@ async function startVideoBatchCompression() {
         crf: state.settings.videoCrf,
         preset: state.settings.videoPreset,
         segments: item.segments,
+        speed: item.playbackSpeed || 1,
         onProgress: (pct) => {
           const overallPct = Math.round(((i + pct / 100) / total) * 100);
           videoProgressBarInner.style.width = `${overallPct}%`;

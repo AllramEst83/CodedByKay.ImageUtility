@@ -27,12 +27,13 @@ function formatTime(s) {
  * @param {File} videoFile - the source video File
  * @param {string} videoName - display name for the modal title
  * @param {Array<{sourceStart:number, sourceEnd:number}>|null} [existingSegments] - previously applied edit, if any
- * @returns {Promise<Array<{sourceStart:number, sourceEnd:number}>|null|false>}
- *   - an array of segments if the user applied edits that change the video
- *   - `null` if the user applied but the result is equivalent to the untouched source (edits cleared)
+ * @param {number} [existingSpeed] - previously applied playback speed (1 = normal), if any
+ * @returns {Promise<{ segments: Array<{sourceStart:number, sourceEnd:number}>|null, speed: number }|false>}
+ *   - `{ segments, speed }` if the user applied — segments is `null` when cut edits are equivalent to the
+ *     untouched source (cleared), speed is 1 when unchanged; either can carry independently of the other
  *   - `false` if the user cancelled/closed without applying
  */
-export function openVideoTimelineEditor(videoFile, videoName, existingSegments) {
+export function openVideoTimelineEditor(videoFile, videoName, existingSegments, existingSpeed) {
   return new Promise((resolve) => {
     const objectUrl = URL.createObjectURL(videoFile);
     let idCounter = 0;
@@ -253,6 +254,7 @@ export function openVideoTimelineEditor(videoFile, videoName, existingSegments) 
     let currentPlaybackIndex = 0;
     let statusTimer = null;
     let playbackSpeed = 1;
+    const initialSpeed = (typeof existingSpeed === 'number' && existingSpeed > 0) ? existingSpeed : 1;
 
     function flashStatus(msg) {
       statusLine.textContent = msg;
@@ -484,6 +486,7 @@ export function openVideoTimelineEditor(videoFile, videoName, existingSegments) 
       clipboard = null;
       playheadSeqTime = 0;
       currentPlaybackIndex = 0;
+      setPlaybackSpeed(1);
       render();
       seekSequence(0);
     }
@@ -541,6 +544,7 @@ export function openVideoTimelineEditor(videoFile, videoName, existingSegments) 
         segments = [{ id: nextId(), sourceStart: 0, sourceEnd: duration }];
       }
       selectedId = segments[0].id;
+      setPlaybackSpeed(initialSpeed);
       render();
       seekSequence(0);
     });
@@ -621,13 +625,13 @@ export function openVideoTimelineEditor(videoFile, videoName, existingSegments) 
         && segments[0].sourceStart <= EDGE_EPS
         && (duration - segments[0].sourceEnd) <= EDGE_EPS;
 
-      const output = isNoOp
+      const segmentsOut = isNoOp
         ? null
         : segments.map(s => ({
             sourceStart: +s.sourceStart.toFixed(3),
             sourceEnd: +s.sourceEnd.toFixed(3)
           }));
-      cleanup(output);
+      cleanup({ segments: segmentsOut, speed: playbackSpeed });
     });
   });
 }
