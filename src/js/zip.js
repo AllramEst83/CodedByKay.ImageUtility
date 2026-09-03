@@ -50,8 +50,8 @@ export async function createZipArchive(items, onProgress) {
 
     // Save main converted file
     const convertedFilename = isVideo
-      ? `${baseName}_compressed${ext}`
-      : `${baseName}_converted${ext}`;
+      ? `${baseName}${ext}`
+      : `${baseName}${ext}`;
     convertedFolder.file(convertedFilename, item.convertedBlob);
 
     // Save thumbnail: video thumbnails are PNG, image thumbs match target format

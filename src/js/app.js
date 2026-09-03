@@ -541,7 +541,7 @@ function createQueueItemElement(item) {
     dlBtn.onclick = () => {
       const ext = getExtensionForMime(state.settings.targetFormat);
       const baseName = item.name.substring(0, item.name.lastIndexOf('.')) || item.name;
-      triggerDownload(item.convertedBlob, `${baseName}_converted${ext}`);
+      triggerDownload(item.convertedBlob, `${baseName}${ext}`);
     };
     actions.appendChild(dlBtn);
 
