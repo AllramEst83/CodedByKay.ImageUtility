@@ -2,7 +2,7 @@
 
 ## App Description
 
-**CodedByKay.ImageUtility** is a client-side web utility designed to convert images into efficient web image formats (such as WebP) and automatically generate thumbnail previews. Built using modern web standards (HTML5, CSS, and ES Modules), all image operations occur directly within the browser for maximum performance and privacy. The user should be able to download the converted image and the thumbnail as a zip folder. The app should support converting multiple images. The user should be able to view what files will be converted and remove images as well before conversion. 
+**CodedByKay.ImageUtility** is a client-side web utility designed to convert images into efficient web image formats (such as WebP), compress videos, build timelapses from a sequence of still frames, and automatically generate thumbnail previews. Built using modern web standards (HTML5, CSS, and ES Modules), all operations occur directly within the browser for maximum performance and privacy. The user should be able to download the converted image and the thumbnail as a zip folder. The app should support converting multiple images. The user should be able to view what files will be converted and remove images as well before conversion. 
 
 ### Supported MIME Types & Formats
 - `.jpg` / `.jpeg` : `image/jpeg`
@@ -45,3 +45,11 @@ Bold colors, high contrast, thick borders, raw functionality, and intentionally 
 - [x] Design modern, responsive UI with dark mode, clear visual feedback, and smooth micro-animations.
 - [x] Display progress indicators, individual item conversion status, and file size savings.
 - [x] Guarantee WCAG accessibility compliance (keyboard navigation, high contrast ratios, ARIA attributes).
+
+### 5. Timelapse Builder (Drawing Recording → Video)
+- [x] Add a "Timelapse" tab that accepts a bulk upload of JPEG/PNG/WebP frames (e.g. hundreds of frames exported by an Android drawing-recorder app).
+- [x] Auto-sort frames by filename (natural/numeric order) on upload, matching how camera apps name sequential shots, with a one-click "Sort by Date Modified" fallback and manual ⬆️⬇️ per-frame reordering + removal.
+- [x] Configurable frame rate, output resolution cap (for browser memory/speed safety on large batches), output format (MP4/WebM), and quality (CRF), plus an optional "freeze final frame" hold duration.
+- [x] Live duration estimate (frame count ÷ fps) before building.
+- [x] Build the timelapse client-side with the existing FFmpeg WASM pipeline (each frame is canvas-resized to a consistent resolution, then stitched via ffmpeg's image-sequence input) — no upload to any server.
+- [x] Preview the finished video inline and download it as MP4/WebM.

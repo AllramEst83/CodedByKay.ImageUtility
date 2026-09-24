@@ -587,6 +587,96 @@ body {
   color: #ffffff;
 }
 
+/* Timelapse Frame Grid */
+.frame-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+
+.frame-card {
+  position: relative;
+  width: 110px;
+  background-color: var(--bg-card);
+  border: var(--border-width) solid var(--border-color);
+  box-shadow: 3px 3px 0px var(--shadow-color);
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border-radius: var(--border-radius);
+}
+
+.frame-order-badge {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  background-color: var(--accent-lime);
+  color: #000000;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border: 2px solid var(--border-color);
+  z-index: 1;
+}
+
+.frame-thumb {
+  width: 100%;
+  height: 90px;
+  border: 2px solid var(--border-color);
+  background-color: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.frame-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.frame-name {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+}
+
+.frame-mini-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.frame-mini-btn {
+  flex: 1;
+  font-size: 0.75rem;
+  padding: 0.2rem;
+  border: 2px solid var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: transform var(--transition-fast), background-color var(--transition-fast);
+}
+
+.frame-mini-btn:hover:not(:disabled) {
+  background-color: var(--accent-cyan);
+}
+
+.frame-mini-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.frame-mini-btn-danger:hover:not(:disabled) {
+  background-color: var(--accent-pink);
+  color: #fff;
+}
+
 /* Footer */
 footer {
   margin-top: auto;

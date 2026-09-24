@@ -8,12 +8,13 @@ import { createZipArchive, triggerDownload, getExtensionForMime } from './zip.js
 import { compressVideo, isVideoFile, getFFmpeg } from './videoConverter.js';
 import { openVideoThumbnailScrubber } from './videoThumbnail.js';
 import { openVideoTimelineEditor } from './videoTimelineEditor.js';
+import { buildTimelapse } from './timelapseConverter.js';
 
 // Application State
 const state = {
   queue: [],         // Array of QueueItem objects (image or video)
   isConverting: false,
-  activeTab: 'image', // 'image' | 'video'
+  activeTab: 'image', // 'image' | 'video' | 'timelapse'
   settings: {
     // Image settings
     targetFormat: 'image/webp',
@@ -28,6 +29,14 @@ const state = {
     videoCrf: 23,
     videoPreset: 'fast',
     videoGenerateThumb: true,
+    // Timelapse settings
+    tlFps: 12,
+    tlResolutionCap: '1280',
+    tlFormat: 'video/mp4',
+    tlCrf: 23,
+    tlPreset: 'fast',
+    tlHoldLastFrame: false,
+    tlHoldSeconds: 2,
   }
 };
 
@@ -40,7 +49,7 @@ let progressCard, progressBarInner, progressText, progressLabel;
 let previewModal, previewModalTitle, previewModalBody, closeModalBtn;
 
 // DOM Elements — tabs
-let tabImageBtn, tabVideoBtn, imageTabPanel, videoTabPanel;
+let tabImageBtn, tabVideoBtn, tabTimelapseBtn, imageTabPanel, videoTabPanel, timelapseTabPanel;
 
 // DOM Elements — video tab
 let videoDropzone, videoFileInput, videoTargetFormatSelect;
@@ -50,20 +59,32 @@ let videoConvertBtn, videoDownloadZipBtn, videoClearQueueBtn, videoAddMoreBtn;
 let videoQueueList, videoEmptyState, videoQueueControls, videoProgressCard;
 let videoProgressBarInner, videoProgressText, videoProgressLog, videoProgressLabel;
 
+// DOM Elements — timelapse tab
+let timelapseDropzone, timelapseFileInput, timelapseQueueList, timelapseEmptyState, timelapseQueueControls;
+let timelapseSortNameBtn, timelapseSortDateBtn, timelapseAddMoreBtn, timelapseClearQueueBtn;
+let timelapseFpsSelect, timelapseResolutionSelect, timelapseFormatSelect;
+let timelapseCrfSlider, timelapseCrfValue, timelapseHoldCheckbox, timelapseHoldSecondsInput;
+let timelapseDurationEstimate, timelapseBuildBtn, timelapseDownloadBtn;
+let timelapseProgressCard, timelapseProgressBarInner, timelapseProgressText, timelapseProgressLabel, timelapseProgressLog;
+let timelapseResultCard, timelapseResultVideo, timelapseResultInfo;
+
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   bindDOMElements();
   attachEventListeners();
   renderQueue();
   renderVideoQueue();
+  renderTimelapseQueue();
 });
 
 function bindDOMElements() {
   // Tabs
   tabImageBtn = document.getElementById('tabImageBtn');
   tabVideoBtn = document.getElementById('tabVideoBtn');
+  tabTimelapseBtn = document.getElementById('tabTimelapseBtn');
   imageTabPanel = document.getElementById('imageTabPanel');
   videoTabPanel = document.getElementById('videoTabPanel');
+  timelapseTabPanel = document.getElementById('timelapseTabPanel');
 
   // Image tab elements
   dropzone = document.getElementById('dropzone');
@@ -113,6 +134,35 @@ function bindDOMElements() {
   videoProgressText = document.getElementById('videoProgressText');
   videoProgressLabel = document.getElementById('videoProgressLabel');
   videoProgressLog = document.getElementById('videoProgressLog');
+
+  // Timelapse tab elements
+  timelapseDropzone = document.getElementById('timelapseDropzone');
+  timelapseFileInput = document.getElementById('timelapseFileInput');
+  timelapseQueueList = document.getElementById('timelapseQueueList');
+  timelapseEmptyState = document.getElementById('timelapseEmptyState');
+  timelapseQueueControls = document.getElementById('timelapseQueueControls');
+  timelapseSortNameBtn = document.getElementById('timelapseSortNameBtn');
+  timelapseSortDateBtn = document.getElementById('timelapseSortDateBtn');
+  timelapseAddMoreBtn = document.getElementById('timelapseAddMoreBtn');
+  timelapseClearQueueBtn = document.getElementById('timelapseClearQueueBtn');
+  timelapseFpsSelect = document.getElementById('timelapseFps');
+  timelapseResolutionSelect = document.getElementById('timelapseResolution');
+  timelapseFormatSelect = document.getElementById('timelapseFormat');
+  timelapseCrfSlider = document.getElementById('timelapseCrfSlider');
+  timelapseCrfValue = document.getElementById('timelapseCrfValue');
+  timelapseHoldCheckbox = document.getElementById('timelapseHoldCheckbox');
+  timelapseHoldSecondsInput = document.getElementById('timelapseHoldSeconds');
+  timelapseDurationEstimate = document.getElementById('timelapseDurationEstimate');
+  timelapseBuildBtn = document.getElementById('timelapseBuildBtn');
+  timelapseDownloadBtn = document.getElementById('timelapseDownloadBtn');
+  timelapseProgressCard = document.getElementById('timelapseProgressCard');
+  timelapseProgressBarInner = document.getElementById('timelapseProgressBarInner');
+  timelapseProgressText = document.getElementById('timelapseProgressText');
+  timelapseProgressLabel = document.getElementById('timelapseProgressLabel');
+  timelapseProgressLog = document.getElementById('timelapseProgressLog');
+  timelapseResultCard = document.getElementById('timelapseResultCard');
+  timelapseResultVideo = document.getElementById('timelapseResultVideo');
+  timelapseResultInfo = document.getElementById('timelapseResultInfo');
 }
 
 function attachEventListeners() {
@@ -125,6 +175,9 @@ function attachEventListeners() {
   }
   if (tabVideoBtn) {
     tabVideoBtn.addEventListener('click', () => switchTab('video'));
+  }
+  if (tabTimelapseBtn) {
+    tabTimelapseBtn.addEventListener('click', () => switchTab('timelapse'));
   }
 
   // ── Auto-switch tab based on what's being dragged in, before it's dropped ──
@@ -305,6 +358,67 @@ function attachEventListeners() {
     videoConvertBtn.addEventListener('click', startVideoBatchCompression);
     videoDownloadZipBtn.addEventListener('click', downloadVideosAsZip);
   }
+
+  // ── Timelapse dropzone & controls ──────────────────────────────────────
+  if (timelapseDropzone) {
+    timelapseDropzone.addEventListener('click', () => timelapseFileInput.click());
+    timelapseDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      timelapseDropzone.classList.add('dragover');
+    });
+    timelapseDropzone.addEventListener('dragleave', () => timelapseDropzone.classList.remove('dragover'));
+    timelapseDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      timelapseDropzone.classList.remove('dragover');
+      if (!(e.dataTransfer.files?.length > 0)) return;
+      handleTimelapseFilesAdded(Array.from(e.dataTransfer.files));
+    });
+
+    timelapseFileInput.addEventListener('change', (e) => {
+      if (e.target.files?.length > 0) {
+        handleTimelapseFilesAdded(Array.from(e.target.files));
+        timelapseFileInput.value = '';
+      }
+    });
+
+    timelapseAddMoreBtn.addEventListener('click', () => timelapseFileInput.click());
+    timelapseClearQueueBtn.addEventListener('click', clearTimelapseQueue);
+    timelapseSortNameBtn.addEventListener('click', () => sortTimelapseQueue('name'));
+    timelapseSortDateBtn.addEventListener('click', () => sortTimelapseQueue('date'));
+
+    timelapseFpsSelect.addEventListener('change', (e) => {
+      state.settings.tlFps = parseInt(e.target.value, 10);
+      updateTimelapseDurationEstimate();
+    });
+
+    timelapseResolutionSelect.addEventListener('change', (e) => {
+      state.settings.tlResolutionCap = e.target.value;
+    });
+
+    timelapseFormatSelect.addEventListener('change', (e) => {
+      state.settings.tlFormat = e.target.value;
+    });
+
+    timelapseCrfSlider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      timelapseCrfValue.textContent = String(val);
+      state.settings.tlCrf = val;
+    });
+
+    timelapseHoldCheckbox.addEventListener('change', (e) => {
+      state.settings.tlHoldLastFrame = e.target.checked;
+      if (timelapseHoldSecondsInput) timelapseHoldSecondsInput.disabled = !e.target.checked;
+      updateTimelapseDurationEstimate();
+    });
+
+    timelapseHoldSecondsInput.addEventListener('input', (e) => {
+      state.settings.tlHoldSeconds = parseFloat(e.target.value) || 0;
+      updateTimelapseDurationEstimate();
+    });
+
+    timelapseBuildBtn.addEventListener('click', startTimelapseBuild);
+    timelapseDownloadBtn.addEventListener('click', downloadTimelapseResult);
+  }
 }
 
 // ── Tab Management ─────────────────────────────────────────────────────────
@@ -312,15 +426,13 @@ function attachEventListeners() {
 function switchTab(tab) {
   state.activeTab = tab;
 
-  if (tabImageBtn && tabVideoBtn) {
-    tabImageBtn.classList.toggle('tab-active', tab === 'image');
-    tabVideoBtn.classList.toggle('tab-active', tab === 'video');
-  }
+  if (tabImageBtn) tabImageBtn.classList.toggle('tab-active', tab === 'image');
+  if (tabVideoBtn) tabVideoBtn.classList.toggle('tab-active', tab === 'video');
+  if (tabTimelapseBtn) tabTimelapseBtn.classList.toggle('tab-active', tab === 'timelapse');
 
-  if (imageTabPanel && videoTabPanel) {
-    imageTabPanel.style.display = tab === 'image' ? 'contents' : 'none';
-    videoTabPanel.style.display = tab === 'video' ? 'contents' : 'none';
-  }
+  if (imageTabPanel) imageTabPanel.style.display = tab === 'image' ? 'contents' : 'none';
+  if (videoTabPanel) videoTabPanel.style.display = tab === 'video' ? 'contents' : 'none';
+  if (timelapseTabPanel) timelapseTabPanel.style.display = tab === 'timelapse' ? 'contents' : 'none';
 }
 
 const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
@@ -1239,4 +1351,334 @@ async function downloadVideosAsZip() {
     videoDownloadZipBtn.disabled = false;
     videoDownloadZipBtn.textContent = '📦 Download ZIP';
   }
+}
+
+// ── Timelapse Queue ───────────────────────────────────────────────────────
+
+/** Ordered frames queue for the timelapse builder */
+const timelapseQueue = [];
+let isTimelapseBuilding = false;
+let timelapseResult = null;        // { blob, size, width, height, durationSeconds, frameCount, ext }
+let timelapseResultVideoUrl = null;
+
+/**
+ * Natural (numeric-aware) filename comparator, so "frame_2.jpg" sorts
+ * before "frame_10.jpg" the way most camera/screen-recorder apps intend.
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+function naturalCompare(a, b) {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+/**
+ * Handle addition of new frame images into the timelapse queue.
+ * New frames are appended and the whole queue is re-sorted by filename,
+ * since that matches how sequential camera/recorder output is named.
+ * @param {File[]} files
+ */
+function handleTimelapseFilesAdded(files) {
+  let addedCount = 0;
+
+  files.forEach((file) => {
+    if (!isImageFile(file)) {
+      showToast(`Skipped non-image file: ${file.name}`, 'error');
+      return;
+    }
+
+    timelapseQueue.push({
+      id: 'tl_' + Math.random().toString(36).substr(2, 9),
+      file,
+      name: file.name,
+      size: file.size,
+      lastModified: file.lastModified || 0,
+      previewUrl: URL.createObjectURL(file),
+    });
+    addedCount++;
+  });
+
+  if (addedCount > 0) {
+    timelapseQueue.sort((a, b) => naturalCompare(a.name, b.name));
+    showToast(`Added ${addedCount} frame(s), sorted by filename`, 'success');
+    renderTimelapseQueue();
+  }
+}
+
+/**
+ * Re-sort the timelapse queue by the given strategy.
+ * @param {'name'|'date'} mode
+ */
+function sortTimelapseQueue(mode) {
+  if (timelapseQueue.length === 0 || isTimelapseBuilding) return;
+
+  if (mode === 'name') {
+    timelapseQueue.sort((a, b) => naturalCompare(a.name, b.name));
+    showToast('Frames sorted by filename', 'info');
+  } else if (mode === 'date') {
+    timelapseQueue.sort((a, b) => a.lastModified - b.lastModified);
+    showToast('Frames sorted by date modified', 'info');
+  }
+  renderTimelapseQueue();
+}
+
+/**
+ * Move a frame earlier/later in the timelapse sequence.
+ * @param {string} id
+ * @param {number} delta - -1 to move earlier, +1 to move later
+ */
+function moveTimelapseFrame(id, delta) {
+  if (isTimelapseBuilding) return;
+  const index = timelapseQueue.findIndex(i => i.id === id);
+  if (index === -1) return;
+  const newIndex = index + delta;
+  if (newIndex < 0 || newIndex >= timelapseQueue.length) return;
+  const [item] = timelapseQueue.splice(index, 1);
+  timelapseQueue.splice(newIndex, 0, item);
+  renderTimelapseQueue();
+}
+
+/**
+ * Remove a frame from the timelapse queue.
+ * @param {string} id
+ */
+function removeTimelapseFrame(id) {
+  if (isTimelapseBuilding) return;
+  const index = timelapseQueue.findIndex(i => i.id === id);
+  if (index !== -1) {
+    const item = timelapseQueue[index];
+    if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    timelapseQueue.splice(index, 1);
+    renderTimelapseQueue();
+    showToast('Removed frame from queue', 'info');
+  }
+}
+
+/**
+ * Clear all frames from the timelapse queue.
+ */
+function clearTimelapseQueue() {
+  if (isTimelapseBuilding) return;
+  timelapseQueue.forEach(item => {
+    if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+  });
+  timelapseQueue.length = 0;
+  renderTimelapseQueue();
+  showToast('Timelapse queue cleared', 'info');
+}
+
+/**
+ * Update the live "N frames → ~M:SS at X fps" estimate readout.
+ */
+function updateTimelapseDurationEstimate() {
+  if (!timelapseDurationEstimate) return;
+
+  const frameCount = timelapseQueue.length;
+  if (frameCount === 0) {
+    timelapseDurationEstimate.textContent = 'Add frames to see estimated duration';
+    return;
+  }
+
+  const holdFrames = state.settings.tlHoldLastFrame
+    ? Math.round(state.settings.tlHoldSeconds * state.settings.tlFps)
+    : 0;
+  const totalFrames = frameCount + holdFrames;
+  const seconds = state.settings.tlFps > 0 ? totalFrames / state.settings.tlFps : 0;
+  const m = Math.floor(seconds / 60);
+  const s = (seconds % 60).toFixed(1).padStart(4, '0');
+
+  timelapseDurationEstimate.textContent = `${frameCount} frame${frameCount === 1 ? '' : 's'} → ~${m}:${s} at ${state.settings.tlFps} fps`;
+}
+
+/**
+ * Render the full timelapse frame grid + controls.
+ */
+function renderTimelapseQueue() {
+  const count = timelapseQueue.length;
+  const countBadge = document.getElementById('timelapseQueueCountBadge');
+  if (countBadge) countBadge.textContent = `${count} Frame${count === 1 ? '' : 's'}`;
+
+  if (count === 0) {
+    if (timelapseEmptyState) timelapseEmptyState.style.display = 'block';
+    if (timelapseQueueList) timelapseQueueList.style.display = 'none';
+    if (timelapseQueueControls) timelapseQueueControls.style.display = 'none';
+    if (timelapseBuildBtn) timelapseBuildBtn.disabled = true;
+    if (timelapseProgressCard) timelapseProgressCard.style.display = 'none';
+    updateTimelapseDurationEstimate();
+    return;
+  }
+
+  if (timelapseEmptyState) timelapseEmptyState.style.display = 'none';
+  if (timelapseQueueList) timelapseQueueList.style.display = 'flex';
+  if (timelapseQueueControls) timelapseQueueControls.style.display = 'flex';
+  if (timelapseBuildBtn) timelapseBuildBtn.disabled = isTimelapseBuilding || count < 2;
+
+  if (timelapseQueueList) {
+    timelapseQueueList.innerHTML = '';
+    timelapseQueue.forEach((item, index) => {
+      timelapseQueueList.appendChild(createTimelapseFrameElement(item, index, count));
+    });
+  }
+
+  updateTimelapseDurationEstimate();
+}
+
+/**
+ * Create a compact frame card: thumbnail, order badge, filename, and
+ * move-up/move-down/remove mini-actions.
+ * @param {Object} item
+ * @param {number} index
+ * @param {number} total
+ */
+function createTimelapseFrameElement(item, index, total) {
+  const card = document.createElement('div');
+  card.id = item.id;
+  card.className = 'frame-card';
+
+  const badge = document.createElement('span');
+  badge.className = 'frame-order-badge';
+  badge.textContent = String(index + 1);
+  card.appendChild(badge);
+
+  const thumbBox = document.createElement('div');
+  thumbBox.className = 'frame-thumb';
+  const img = document.createElement('img');
+  img.src = item.previewUrl;
+  img.alt = item.name;
+  img.loading = 'lazy';
+  thumbBox.appendChild(img);
+  card.appendChild(thumbBox);
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'frame-name';
+  nameEl.textContent = item.name;
+  nameEl.title = item.name;
+  card.appendChild(nameEl);
+
+  const actions = document.createElement('div');
+  actions.className = 'frame-mini-actions';
+
+  const upBtn = document.createElement('button');
+  upBtn.className = 'frame-mini-btn';
+  upBtn.innerHTML = '⬆️';
+  upBtn.title = 'Move earlier';
+  upBtn.disabled = index === 0 || isTimelapseBuilding;
+  upBtn.onclick = () => moveTimelapseFrame(item.id, -1);
+  actions.appendChild(upBtn);
+
+  const downBtn = document.createElement('button');
+  downBtn.className = 'frame-mini-btn';
+  downBtn.innerHTML = '⬇️';
+  downBtn.title = 'Move later';
+  downBtn.disabled = index === total - 1 || isTimelapseBuilding;
+  downBtn.onclick = () => moveTimelapseFrame(item.id, 1);
+  actions.appendChild(downBtn);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'frame-mini-btn frame-mini-btn-danger';
+  removeBtn.innerHTML = '✕';
+  removeBtn.title = 'Remove frame';
+  removeBtn.disabled = isTimelapseBuilding;
+  removeBtn.onclick = () => removeTimelapseFrame(item.id);
+  actions.appendChild(removeBtn);
+
+  card.appendChild(actions);
+
+  return card;
+}
+
+/**
+ * Build the timelapse video from the current queue order and settings.
+ */
+async function startTimelapseBuild() {
+  if (timelapseQueue.length === 0 || isTimelapseBuilding) return;
+
+  if (timelapseQueue.length < 2) {
+    showToast('Add at least 2 frames to build a timelapse', 'error');
+    return;
+  }
+
+  isTimelapseBuilding = true;
+  timelapseBuildBtn.disabled = true;
+  timelapseDownloadBtn.disabled = true;
+  timelapseClearQueueBtn.disabled = true;
+  timelapseAddMoreBtn.disabled = true;
+  renderTimelapseQueue(); // also disables per-frame reorder/remove buttons
+
+  timelapseProgressCard.style.display = 'block';
+  timelapseProgressBarInner.style.width = '0%';
+  if (timelapseProgressLabel) timelapseProgressLabel.textContent = '⏱️ Building Timelapse...';
+  timelapseProgressText.textContent = 'Loading FFmpeg WASM...';
+  if (timelapseProgressLog) timelapseProgressLog.textContent = '';
+  if (timelapseResultCard) timelapseResultCard.style.display = 'none';
+
+  try {
+    await getFFmpeg((msg) => {
+      if (timelapseProgressLog) timelapseProgressLog.textContent = msg;
+    });
+
+    const result = await buildTimelapse(
+      timelapseQueue.map(item => item.file),
+      {
+        fps: state.settings.tlFps,
+        targetFormat: state.settings.tlFormat,
+        crf: state.settings.tlCrf,
+        preset: state.settings.tlPreset,
+        resolutionCap: state.settings.tlResolutionCap,
+        holdLastFrameSeconds: state.settings.tlHoldLastFrame ? state.settings.tlHoldSeconds : 0,
+        onProgress: (pct, label) => {
+          timelapseProgressBarInner.style.width = `${pct}%`;
+          timelapseProgressText.textContent = `${label} (${pct}%)`;
+        },
+        onLog: (msg) => {
+          if (timelapseProgressLog) timelapseProgressLog.textContent = msg;
+        }
+      }
+    );
+
+    timelapseResult = result;
+    if (timelapseResultVideoUrl) URL.revokeObjectURL(timelapseResultVideoUrl);
+    timelapseResultVideoUrl = URL.createObjectURL(result.blob);
+
+    if (timelapseResultVideo) timelapseResultVideo.src = timelapseResultVideoUrl;
+    if (timelapseResultCard) timelapseResultCard.style.display = 'block';
+    if (timelapseResultInfo) {
+      timelapseResultInfo.textContent = `${result.width}×${result.height} • ${result.frameCount} frames • ${result.durationSeconds.toFixed(1)}s • ${formatBytes(result.size)}`;
+    }
+
+    if (timelapseProgressLabel) timelapseProgressLabel.textContent = '✅ Timelapse Built';
+    timelapseProgressText.textContent = `Done: ${formatBytes(result.size)}`;
+    if (timelapseProgressLog) timelapseProgressLog.textContent = '';
+    timelapseDownloadBtn.disabled = false;
+
+    showToast('Timelapse built successfully!', 'success');
+  } catch (err) {
+    console.error('Failed to build timelapse:', err);
+    if (timelapseProgressLabel) timelapseProgressLabel.textContent = '❌ Build Failed';
+    timelapseProgressText.textContent = err.message || 'Unknown error';
+    showToast(`Failed to build timelapse: ${err.message || 'Unknown error'}`, 'error');
+  } finally {
+    isTimelapseBuilding = false;
+    timelapseClearQueueBtn.disabled = false;
+    timelapseAddMoreBtn.disabled = false;
+    renderTimelapseQueue();
+  }
+}
+
+/**
+ * Trigger download of the built timelapse video.
+ */
+function downloadTimelapseResult() {
+  if (!timelapseResult) {
+    showToast('No timelapse built yet.', 'error');
+    return;
+  }
+
+  const now = new Date().toISOString().split('T')[0];
+  const ext = timelapseResult.ext === 'webm' ? '.webm' : '.mp4';
+  triggerDownload(
+    timelapseResult.blob,
+    `CodedByKay_Timelapse_${timelapseResult.frameCount}frames_${state.settings.tlFps}fps_${now}${ext}`
+  );
+  showToast('Timelapse downloaded!', 'success');
 }
