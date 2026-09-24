@@ -81,8 +81,8 @@ export async function createZipArchive(items, onProgress) {
 
 /**
  * Trigger browser download for a Blob or File object
- * @param {Blob} blob 
- * @param {string} filename 
+ * @param {Blob} blob
+ * @param {string} filename
  */
 export function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -93,4 +93,49 @@ export function triggerDownload(blob, filename) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const ZIP_IMAGE_EXT_RE = /\.(jpe?g|png|webp)$/i;
+
+/**
+ * Check whether a File is a ZIP archive (by extension or MIME type).
+ * @param {File} file
+ * @returns {boolean}
+ */
+export function isZipFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  return ext === 'zip' || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
+}
+
+/**
+ * Extract image entries from a ZIP archive, recursing into subfolders and
+ * skipping macOS resource-fork junk (__MACOSX/, dotfiles). Entries are
+ * sorted by their in-zip path so folder-grouped frame sequences stay
+ * correctly ordered.
+ * @param {File} zipFile
+ * @returns {Promise<Array<{file: File, relativePath: string}>>}
+ */
+export async function extractImagesFromZip(zipFile) {
+  const zip = await JSZip.loadAsync(zipFile);
+
+  const entries = Object.values(zip.files)
+    .filter((entry) => {
+      if (entry.dir) return false;
+      const baseName = entry.name.split('/').pop();
+      if (!baseName || baseName.startsWith('.')) return false;
+      if (entry.name.startsWith('__MACOSX/')) return false;
+      return ZIP_IMAGE_EXT_RE.test(baseName);
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+  const results = [];
+  for (const entry of entries) {
+    const blob = await entry.async('blob');
+    const baseName = entry.name.split('/').pop();
+    const ext = baseName.split('.').pop().toLowerCase();
+    const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    const file = new File([blob], baseName, { type: mime, lastModified: zipFile.lastModified || Date.now() });
+    results.push({ file, relativePath: entry.name });
+  }
+  return results;
 }
