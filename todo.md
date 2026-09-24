@@ -48,6 +48,7 @@ Bold colors, high contrast, thick borders, raw functionality, and intentionally 
 
 ### 5. Timelapse Builder (Drawing Recording → Video)
 - [x] Add a "Timelapse" tab that accepts a bulk upload of JPEG/PNG/WebP frames (e.g. hundreds of frames exported by an Android drawing-recorder app).
+- [x] Support uploading a whole folder (via a "Select Folder" picker or dragging a folder in) and a `.zip` of frames, so a 100+ image batch from a tablet doesn't need picking files one by one; ZIP entries are extracted client-side with JSZip.
 - [x] Auto-sort frames by filename (natural/numeric order) on upload, matching how camera apps name sequential shots, with a one-click "Sort by Date Modified" fallback and manual ⬆️⬇️ per-frame reordering + removal.
 - [x] Configurable frame rate, output resolution cap (for browser memory/speed safety on large batches), output format (MP4/WebM), and quality (CRF), plus an optional "freeze final frame" hold duration.
 - [x] Live duration estimate (frame count ÷ fps) before building.

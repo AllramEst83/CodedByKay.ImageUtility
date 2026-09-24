@@ -378,14 +378,20 @@
 
           <!-- Drag & Drop Zone -->
           <div id="timelapseDropzone" class="dropzone" role="region" aria-label="Drag and drop timelapse frame upload area" tabindex="0">
-            <input type="file" id="timelapseFileInput" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" style="display: none;">
+            <input type="file" id="timelapseFileInput" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,.zip,application/zip" style="display: none;">
+            <input type="file" id="timelapseFolderInput" webkitdirectory directory multiple style="display: none;">
             <div class="dropzone-icon">⏱️</div>
             <h2 class="dropzone-title">Drag &amp; Drop Timelapse Frames Here</h2>
-            <p class="dropzone-hint">or click anywhere to browse — select every JPEG your drawing app recorded, all at once</p>
+            <p class="dropzone-hint">or click to browse — drop a whole folder, a ZIP, or every JPEG at once</p>
             <div class="dropzone-formats">
               <span class="badge">JPG / JPEG</span>
               <span class="badge">PNG</span>
               <span class="badge">WEBP</span>
+              <span class="badge">ZIP</span>
+              <span class="badge">📁 Folder</span>
+            </div>
+            <div style="margin-top: 1rem; position: relative; z-index: 1;">
+              <button type="button" id="timelapseSelectFolderBtn" class="brutal-btn btn-sm btn-purple">📁 Select Folder</button>
             </div>
           </div>
 
@@ -417,7 +423,8 @@
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
               <button id="timelapseSortNameBtn" class="brutal-btn btn-sm btn-cyan">🔤 Sort by Name</button>
               <button id="timelapseSortDateBtn" class="brutal-btn btn-sm btn-cyan">🕒 Sort by Date</button>
-              <button id="timelapseAddMoreBtn" class="brutal-btn btn-sm btn-cyan">➕ Add More</button>
+              <button id="timelapseAddMoreBtn" class="brutal-btn btn-sm btn-cyan">➕ Add Files</button>
+              <button id="timelapseAddFolderBtn" class="brutal-btn btn-sm btn-purple">📁 Add Folder</button>
               <button id="timelapseClearQueueBtn" class="brutal-btn btn-sm btn-pink">🗑️ Clear</button>
             </div>
           </div>
@@ -430,7 +437,7 @@
             <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⏱️</div>
             <p class="empty-title">No Frames Queued Yet</p>
             <p style="font-size: 0.9rem; color: var(--text-muted);">
-              Drop all the <code>.jpg</code> frames your Android drawing app recorded — hundreds are fine. They're auto-sorted by filename and stitched into one video.
+              Drop all the <code>.jpg</code> frames your Android drawing app recorded — hundreds are fine. Drag in a whole folder, a <code>.zip</code> of frames, or use "Select Folder" above. They're auto-sorted by filename and stitched into one video.
             </p>
           </div>
 
@@ -524,7 +531,7 @@
             <div class="info-note" style="margin-top: 1.25rem;">
               <p style="font-size: 0.78rem; font-weight: 700;">ℹ️ How it works</p>
               <p style="font-size: 0.73rem; color: var(--text-muted); margin-top: 0.2rem;">
-                Every frame is resized to match and stitched together with <strong>FFmpeg WASM</strong> — entirely in your browser, nothing uploaded. Frames auto-sort by filename, matching how most camera apps name sequential photos. Click ⬆️⬇️ on any frame to fine-tune order, or ✕ to drop a bad shot.
+                Every frame is resized to match and stitched together with <strong>FFmpeg WASM</strong> — entirely in your browser, nothing uploaded. Frames auto-sort by filename, matching how most camera apps name sequential photos. Click ⬆️⬇️ on any frame to fine-tune order, or ✕ to drop a bad shot. Got hundreds of frames on a tablet? Zip the folder first, or use "Select Folder" / drag the whole folder in — no need to pick files one by one.
               </p>
             </div>
 

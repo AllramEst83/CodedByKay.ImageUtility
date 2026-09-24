@@ -4,7 +4,7 @@
  */
 import { formatBytes, showToast, initTheme, toggleTheme, isCanvasFormatSupported } from './ui.js';
 import { loadImageFile, convertImage } from './converter.js';
-import { createZipArchive, triggerDownload, getExtensionForMime } from './zip.js';
+import { createZipArchive, triggerDownload, getExtensionForMime, isZipFile, extractImagesFromZip } from './zip.js';
 import { compressVideo, isVideoFile, getFFmpeg } from './videoConverter.js';
 import { openVideoThumbnailScrubber } from './videoThumbnail.js';
 import { openVideoTimelineEditor } from './videoTimelineEditor.js';
@@ -60,8 +60,8 @@ let videoQueueList, videoEmptyState, videoQueueControls, videoProgressCard;
 let videoProgressBarInner, videoProgressText, videoProgressLog, videoProgressLabel;
 
 // DOM Elements — timelapse tab
-let timelapseDropzone, timelapseFileInput, timelapseQueueList, timelapseEmptyState, timelapseQueueControls;
-let timelapseSortNameBtn, timelapseSortDateBtn, timelapseAddMoreBtn, timelapseClearQueueBtn;
+let timelapseDropzone, timelapseFileInput, timelapseFolderInput, timelapseSelectFolderBtn, timelapseQueueList, timelapseEmptyState, timelapseQueueControls;
+let timelapseSortNameBtn, timelapseSortDateBtn, timelapseAddMoreBtn, timelapseAddFolderBtn, timelapseClearQueueBtn;
 let timelapseFpsSelect, timelapseResolutionSelect, timelapseFormatSelect;
 let timelapseCrfSlider, timelapseCrfValue, timelapseHoldCheckbox, timelapseHoldSecondsInput;
 let timelapseDurationEstimate, timelapseBuildBtn, timelapseDownloadBtn;
@@ -138,12 +138,15 @@ function bindDOMElements() {
   // Timelapse tab elements
   timelapseDropzone = document.getElementById('timelapseDropzone');
   timelapseFileInput = document.getElementById('timelapseFileInput');
+  timelapseFolderInput = document.getElementById('timelapseFolderInput');
+  timelapseSelectFolderBtn = document.getElementById('timelapseSelectFolderBtn');
   timelapseQueueList = document.getElementById('timelapseQueueList');
   timelapseEmptyState = document.getElementById('timelapseEmptyState');
   timelapseQueueControls = document.getElementById('timelapseQueueControls');
   timelapseSortNameBtn = document.getElementById('timelapseSortNameBtn');
   timelapseSortDateBtn = document.getElementById('timelapseSortDateBtn');
   timelapseAddMoreBtn = document.getElementById('timelapseAddMoreBtn');
+  timelapseAddFolderBtn = document.getElementById('timelapseAddFolderBtn');
   timelapseClearQueueBtn = document.getElementById('timelapseClearQueueBtn');
   timelapseFpsSelect = document.getElementById('timelapseFps');
   timelapseResolutionSelect = document.getElementById('timelapseResolution');
@@ -370,8 +373,10 @@ function attachEventListeners() {
     timelapseDropzone.addEventListener('drop', (e) => {
       e.preventDefault();
       timelapseDropzone.classList.remove('dragover');
-      if (!(e.dataTransfer.files?.length > 0)) return;
-      handleTimelapseFilesAdded(Array.from(e.dataTransfer.files));
+      if (!e.dataTransfer) return;
+      expandDroppedEntries(e.dataTransfer).then((entries) => {
+        if (entries.length > 0) handleTimelapseFilesAdded(entries);
+      });
     });
 
     timelapseFileInput.addEventListener('change', (e) => {
@@ -381,7 +386,21 @@ function attachEventListeners() {
       }
     });
 
+    timelapseFolderInput.addEventListener('change', (e) => {
+      if (e.target.files?.length > 0) {
+        handleTimelapseFilesAdded(Array.from(e.target.files));
+        timelapseFolderInput.value = '';
+      }
+    });
+
+    // Prevent the dropzone's own click-to-browse handler from also firing.
+    timelapseSelectFolderBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      timelapseFolderInput.click();
+    });
+
     timelapseAddMoreBtn.addEventListener('click', () => timelapseFileInput.click());
+    timelapseAddFolderBtn.addEventListener('click', () => timelapseFolderInput.click());
     timelapseClearQueueBtn.addEventListener('click', clearTimelapseQueue);
     timelapseSortNameBtn.addEventListener('click', () => sortTimelapseQueue('name'));
     timelapseSortDateBtn.addEventListener('click', () => sortTimelapseQueue('date'));
@@ -1373,34 +1392,124 @@ function naturalCompare(a, b) {
 }
 
 /**
- * Handle addition of new frame images into the timelapse queue.
+ * Recursively read a single dropped FileSystemEntry (file or directory)
+ * into a flat list of {file, relativePath} pairs. Directory reading is
+ * paginated by the browser, so readEntries() is called repeatedly until
+ * it returns empty.
+ * @param {FileSystemEntry} entry
+ * @param {string} pathPrefix
+ * @returns {Promise<Array<{file: File, relativePath: string}>>}
+ */
+function readFileSystemEntry(entry, pathPrefix = '') {
+  return new Promise((resolve) => {
+    if (entry.isFile) {
+      entry.file(
+        (file) => resolve([{ file, relativePath: pathPrefix + file.name }]),
+        () => resolve([])
+      );
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const collected = [];
+      const readBatch = () => {
+        reader.readEntries((batch) => {
+          if (batch.length === 0) {
+            Promise.all(collected.map((child) => readFileSystemEntry(child, `${pathPrefix}${entry.name}/`)))
+              .then((nested) => resolve(nested.flat()));
+          } else {
+            collected.push(...batch);
+            readBatch();
+          }
+        }, () => resolve([]));
+      };
+      readBatch();
+    } else {
+      resolve([]);
+    }
+  });
+}
+
+/**
+ * Expand a drop event's DataTransfer into a flat {file, relativePath} list,
+ * walking into any dropped folders via the browser's FileSystem Entry API
+ * (supported in Chrome/Edge/Firefox). Falls back to the flat file list
+ * (no folder expansion) when that API isn't available.
+ * @param {DataTransfer} dataTransfer
+ * @returns {Promise<Array<{file: File, relativePath: string}>>}
+ */
+async function expandDroppedEntries(dataTransfer) {
+  const items = dataTransfer.items;
+  if (items && items.length > 0 && typeof items[0].webkitGetAsEntry === 'function') {
+    const entries = Array.from(items)
+      .map((item) => item.webkitGetAsEntry())
+      .filter(Boolean);
+    if (entries.length > 0) {
+      const nested = await Promise.all(entries.map((entry) => readFileSystemEntry(entry)));
+      return nested.flat();
+    }
+  }
+  return Array.from(dataTransfer.files || []).map((file) => ({ file, relativePath: file.name }));
+}
+
+/**
+ * Handle addition of new frame sources into the timelapse queue. Accepts
+ * plain File objects (from a file/folder <input>, which sets
+ * webkitRelativePath for folder picks) or {file, relativePath} pairs (from
+ * a drag-and-drop folder walk). ZIP archives are transparently extracted.
  * New frames are appended and the whole queue is re-sorted by filename,
  * since that matches how sequential camera/recorder output is named.
- * @param {File[]} files
+ * @param {Array<File|{file: File, relativePath: string}>} items
  */
-function handleTimelapseFilesAdded(files) {
-  let addedCount = 0;
+async function handleTimelapseFilesAdded(items) {
+  const normalized = items.map((it) =>
+    it instanceof File ? { file: it, relativePath: it.webkitRelativePath || it.name } : it
+  );
 
-  files.forEach((file) => {
-    if (!isImageFile(file)) {
-      showToast(`Skipped non-image file: ${file.name}`, 'error');
-      return;
+  const toAdd = []; // {file, relativePath}
+  let skippedCount = 0;
+  let zipCount = 0;
+
+  for (const { file, relativePath } of normalized) {
+    if (isZipFile(file)) {
+      zipCount++;
+      try {
+        showToast(`Extracting images from "${file.name}"...`, 'info', 2000);
+        const extracted = await extractImagesFromZip(file);
+        if (extracted.length === 0) {
+          showToast(`No images found inside "${file.name}"`, 'error');
+        } else {
+          extracted.forEach((e) => toAdd.push({ file: e.file, relativePath: `${file.name}/${e.relativePath}` }));
+        }
+      } catch (err) {
+        console.error(`Failed to read ZIP ${file.name}:`, err);
+        showToast(`Could not read ZIP file "${file.name}"`, 'error');
+      }
+    } else if (isImageFile(file)) {
+      toAdd.push({ file, relativePath });
+    } else {
+      skippedCount++;
     }
+  }
 
+  if (skippedCount > 0) {
+    showToast(`Skipped ${skippedCount} unsupported file${skippedCount === 1 ? '' : 's'}`, 'error');
+  }
+
+  toAdd.forEach(({ file, relativePath }) => {
     timelapseQueue.push({
       id: 'tl_' + Math.random().toString(36).substr(2, 9),
       file,
       name: file.name,
+      sortKey: relativePath,
       size: file.size,
       lastModified: file.lastModified || 0,
       previewUrl: URL.createObjectURL(file),
     });
-    addedCount++;
   });
 
-  if (addedCount > 0) {
-    timelapseQueue.sort((a, b) => naturalCompare(a.name, b.name));
-    showToast(`Added ${addedCount} frame(s), sorted by filename`, 'success');
+  if (toAdd.length > 0) {
+    timelapseQueue.sort((a, b) => naturalCompare(a.sortKey, b.sortKey));
+    const zipNote = zipCount > 0 ? ` (from ${zipCount} zip file${zipCount === 1 ? '' : 's'})` : '';
+    showToast(`Added ${toAdd.length} frame(s)${zipNote}, sorted by filename`, 'success');
     renderTimelapseQueue();
   }
 }
@@ -1413,7 +1522,7 @@ function sortTimelapseQueue(mode) {
   if (timelapseQueue.length === 0 || isTimelapseBuilding) return;
 
   if (mode === 'name') {
-    timelapseQueue.sort((a, b) => naturalCompare(a.name, b.name));
+    timelapseQueue.sort((a, b) => naturalCompare(a.sortKey || a.name, b.sortKey || b.name));
     showToast('Frames sorted by filename', 'info');
   } else if (mode === 'date') {
     timelapseQueue.sort((a, b) => a.lastModified - b.lastModified);
@@ -1603,6 +1712,7 @@ async function startTimelapseBuild() {
   timelapseDownloadBtn.disabled = true;
   timelapseClearQueueBtn.disabled = true;
   timelapseAddMoreBtn.disabled = true;
+  timelapseAddFolderBtn.disabled = true;
   renderTimelapseQueue(); // also disables per-frame reorder/remove buttons
 
   timelapseProgressCard.style.display = 'block';
@@ -1661,6 +1771,7 @@ async function startTimelapseBuild() {
     isTimelapseBuilding = false;
     timelapseClearQueueBtn.disabled = false;
     timelapseAddMoreBtn.disabled = false;
+    timelapseAddFolderBtn.disabled = false;
     renderTimelapseQueue();
   }
 }
